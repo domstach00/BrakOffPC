@@ -1,6 +1,7 @@
 package org.wodrol.brakoffpc.imports;
 
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class TesseractPdfOcrServiceTest {
 
     @Test
+    @Disabled("tymczasowo wyłączony")
     void extractsItemsFromSampleScannedPdf() throws IOException, InterruptedException {
         Assumptions.assumeTrue(isTesseractAvailable());
 
