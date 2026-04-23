@@ -513,10 +513,10 @@ public class HomeController {
 
     private String formatDashboardDifferenceLabel(int diffTotal) {
         if (diffTotal < 0) {
-            return "Różnica: " + Math.abs(diffTotal) + " (brak)";
+            return "Różnica: " + Math.abs(diffTotal) + " (nadmiar)";
         }
         if (diffTotal > 0) {
-            return "Różnica: " + diffTotal + " (nadmiar)";
+            return "Różnica: " + diffTotal + " (brak)";
         }
         return "Różnica: 0 (zgodność)";
     }

@@ -319,10 +319,10 @@
 
     function formatDashboardDifferenceLabel(differenceTotal) {
         if (differenceTotal < 0) {
-            return `Różnica: ${Math.abs(differenceTotal)} (brak)`;
+            return `Różnica: ${Math.abs(differenceTotal)} (nadmiar)`;
         }
         if (differenceTotal > 0) {
-            return `Różnica: ${differenceTotal} (nadmiar)`;
+            return `Różnica: ${differenceTotal} (brak)`;
         }
         return 'Różnica: 0 (zgodność)';
     }
