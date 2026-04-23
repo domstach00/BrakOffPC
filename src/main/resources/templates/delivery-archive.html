@@ -75,10 +75,10 @@
                                   th:text="${delivery.status()}"></span>
                         </td>
                         <td data-label="Akcja">
-                            <details class="row-menu">
-                                <summary class="row-menu-trigger" aria-label="Akcje">
+                            <div class="row-menu">
+                                <button type="button" class="row-menu-trigger" aria-label="Akcje" aria-expanded="false">
                                     <span aria-hidden="true">&#8942;</span>
-                                </summary>
+                                </button>
                                 <div class="row-menu-panel">
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()}}">Zobacz dane</a>
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/report.pdf'}">Pobierz raport</a>
@@ -90,7 +90,7 @@
                                         Kontynuuj
                                     </button>
                                 </div>
-                            </details>
+                            </div>
                         </td>
                     </tr>
                     </tbody>
@@ -108,5 +108,85 @@
         </div>
     </section>
 </main>
+<script>
+    const archiveRowMenus = Array.from(document.querySelectorAll('.row-menu'));
+
+    function updateRowMenuDirection(menu) {
+        menu.classList.remove('open-up');
+        const trigger = menu.querySelector('.row-menu-trigger');
+        const panel = menu.querySelector('.row-menu-panel');
+        if (!trigger) {
+            return;
+        }
+
+        const triggerRect = trigger.getBoundingClientRect();
+        const shell = menu.closest('.table-shell');
+        const shellRect = shell ? shell.getBoundingClientRect() : null;
+        const panelHeight = panel?.offsetHeight || 180;
+        const viewportSpaceBelow = window.innerHeight - triggerRect.bottom;
+        const viewportSpaceAbove = triggerRect.top;
+        const shellSpaceBelow = shellRect ? shellRect.bottom - triggerRect.bottom : viewportSpaceBelow;
+        const shellSpaceAbove = shellRect ? triggerRect.top - shellRect.top : viewportSpaceAbove;
+        const availableBelow = Math.min(viewportSpaceBelow, shellSpaceBelow);
+        const availableAbove = Math.min(viewportSpaceAbove, shellSpaceAbove);
+
+        if (availableBelow < panelHeight && availableAbove > availableBelow) {
+            menu.classList.add('open-up');
+        }
+    }
+
+    function closeAllMenus() {
+        for (const menu of archiveRowMenus) {
+            menu.classList.remove('is-open', 'open-up');
+            const trigger = menu.querySelector('.row-menu-trigger');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+    }
+
+    for (const menu of archiveRowMenus) {
+        const trigger = menu.querySelector('.row-menu-trigger');
+        if (!trigger) {
+            continue;
+        }
+
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            const willOpen = !menu.classList.contains('is-open');
+            closeAllMenus();
+            if (!willOpen) {
+                return;
+            }
+
+            menu.classList.add('is-open');
+            updateRowMenuDirection(menu);
+            trigger.setAttribute('aria-expanded', 'true');
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        const clickedInsideMenu = event.target.closest('.row-menu');
+        if (clickedInsideMenu) {
+            return;
+        }
+        closeAllMenus();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        closeAllMenus();
+    });
+
+    window.addEventListener('resize', () => {
+        for (const menu of archiveRowMenus) {
+            if (menu.classList.contains('is-open')) {
+                updateRowMenuDirection(menu);
+            }
+        }
+    });
+</script>
 </body>
 </html>
