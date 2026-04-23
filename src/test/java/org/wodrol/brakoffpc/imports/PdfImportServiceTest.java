@@ -4,8 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -119,9 +117,12 @@ class PdfImportServiceTest {
         PdfImportService service = new PdfImportService(document -> OCR_TEXT);
         MockMultipartFile file = new MockMultipartFile(
                 "pdfFile",
-                "CCF_000470.pdf",
+                "scan.pdf",
                 "application/pdf",
-                Files.readAllBytes(Path.of("CCF_000470.pdf"))
+                TestPdfFactory.createImageOnlyPdf(List.of(
+                        "5906900702639 KUBKI DO PIWA 500ML 10",
+                        "5906900203440 SLOMKI PAPIEROWE 20"
+                ))
         );
 
         List<ImportDraftItem> items = service.extractItems(file);

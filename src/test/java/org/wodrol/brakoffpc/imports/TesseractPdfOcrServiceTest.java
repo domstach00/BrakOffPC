@@ -5,8 +5,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,16 +19,17 @@ class TesseractPdfOcrServiceTest {
         PdfImportService service = new PdfImportService(ocrService);
         MockMultipartFile file = new MockMultipartFile(
                 "pdfFile",
-                "CCF_000470.pdf",
+                "scan.pdf",
                 "application/pdf",
-                Files.readAllBytes(Path.of("CCF_000470.pdf"))
+                TestPdfFactory.createImageOnlyPdf(List.of("5906900702639 TESTOWY PRODUKT OCR 10"))
         );
 
         List<ImportDraftItem> items = service.extractItems(file);
 
-        assertEquals(17, items.size());
+        assertEquals(1, items.size());
         assertEquals("5906900702639", items.getFirst().barcode());
-        assertEquals("5906900003064", items.getLast().barcode());
+        assertEquals("TESTOWY PRODUKT OCR", items.getFirst().name());
+        assertEquals(10, items.getFirst().expectedQty());
     }
 
     private boolean isTesseractAvailable() throws IOException, InterruptedException {
