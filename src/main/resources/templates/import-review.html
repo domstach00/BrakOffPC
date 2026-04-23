@@ -55,7 +55,6 @@
                     <p class="hint">Możesz edytować, usuwać i dodawać nowe wiersze bez opuszczania strony.</p>
                 </div>
                 <div class="actions">
-                    <button type="button" class="secondary" onclick="addRow()">Dodaj wiersz</button>
                     <a class="button ghost" th:href="@{/}">Anuluj</a>
                 </div>
             </div>
@@ -80,6 +79,10 @@
                 </tr>
                 </tbody>
             </table>
+            </div>
+
+            <div class="actions top-gap">
+                <button type="button" class="secondary" onclick="addRow()">Dodaj wiersz</button>
             </div>
 
             <div class="sticky-actions top-gap">

@@ -59,9 +59,6 @@
                     <strong th:text="${toolbarTitle}"></strong>
                     <p class="hint" th:text="${toolbarHint}"></p>
                 </div>
-                <div class="actions">
-                    <button type="button" class="secondary" onclick="addAdjustmentRow()">Dodaj rekord</button>
-                </div>
             </div>
             <div class="table-shell">
                 <table id="delivery-adjustment-table">
@@ -102,6 +99,10 @@
                 </table>
             </div>
 
+            <div class="actions top-gap">
+                <button type="button" class="secondary" onclick="addAdjustmentRow()">Dodaj rekord</button>
+            </div>
+
             <div class="sticky-actions top-gap">
                 <p class="hint" th:text="${saveHint}"></p>
                 <button type="submit">Zapisz korektę</button>
@@ -110,6 +111,39 @@
     </section>
 </main>
 <script>
+    function removeAdjustmentRow(button) {
+        const row = button.closest('tr');
+        if (!row) {
+            return;
+        }
+
+        row.remove();
+        reindexAdjustmentRows();
+    }
+
+    function reindexAdjustmentRows() {
+        const rows = document.querySelectorAll('#delivery-adjustment-table tbody tr');
+        rows.forEach((row, index) => {
+            row.querySelectorAll('input').forEach(input => {
+                if (input.name.endsWith('.originalBarcode')) {
+                    input.name = `rows[${index}].originalBarcode`;
+                }
+                if (input.name.endsWith('.barcode')) {
+                    input.name = `rows[${index}].barcode`;
+                }
+                if (input.name.endsWith('.name')) {
+                    input.name = `rows[${index}].name`;
+                }
+                if (input.name.endsWith('.expectedQty')) {
+                    input.name = `rows[${index}].expectedQty`;
+                }
+                if (input.name.endsWith('.deleted')) {
+                    input.name = `rows[${index}].deleted`;
+                }
+            });
+        });
+    }
+
     function addAdjustmentRow() {
         const tbody = document.querySelector('#delivery-adjustment-table tbody');
         if (!tbody) {
@@ -134,10 +168,7 @@
                 <span class="badge">Nowy</span>
             </td>
             <td data-label="Usuń">
-                <label class="delete-toggle">
-                    <input name="rows[${index}].deleted" type="checkbox">
-                    <span>Usuń</span>
-                </label>
+                <button type="button" class="ghost" onclick="removeAdjustmentRow(this)">Usuń</button>
             </td>
         `;
         tbody.appendChild(row);

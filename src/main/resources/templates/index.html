@@ -101,7 +101,7 @@
             <div class="api-list" th:if="${!#lists.isEmpty(localEndpoints)}">
                 <div class="api-item">
                     <code th:text="${localEndpoints[0]}"></code>
-                    <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres poniżej</p>
+                    <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres z listy poniżej</p>
                 </div>
                 <details class="api-more" th:if="${#lists.size(localEndpoints) > 1}">
                     <summary th:text="${'Pokaz pozostale adresy (' + (#lists.size(localEndpoints) - 1) + ')'}"></summary>
