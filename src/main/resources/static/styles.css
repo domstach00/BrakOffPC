@@ -751,6 +751,25 @@ tbody tr:hover {
     align-self: stretch;
 }
 
+.delivery-edit-summary {
+    gap: 10px;
+}
+
+.delivery-edit-summary .stat-card.compact {
+    min-width: 0;
+    padding: 14px 14px;
+}
+
+.delivery-edit-summary .stat-label {
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+}
+
+.delivery-edit-summary .stat-value {
+    margin-top: 8px;
+    font-size: clamp(1.35rem, 2.8vw, 2rem);
+}
+
 code {
     padding: 3px 7px;
     border-radius: 8px;
