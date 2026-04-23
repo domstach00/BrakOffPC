@@ -1,0 +1,47 @@
+name: Build EXE
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build jar
+        run: mvn clean package
+
+      - name: Find JAR
+        shell: cmd
+        run: |
+          for %%f in (target\*jar) do (
+            echo %%f | findstr /v "original" >nul && set JAR=%%~nxf
+          )
+          echo Found JAR: %JAR%
+          echo JAR=%JAR%>>%GITHUB_ENV%
+
+      - name: Create EXE
+        shell: cmd
+        run: |
+          jpackage ^
+            --name BrakOffPC ^
+            --input target ^
+            --main-jar %JAR% ^
+            --main-class org.springframework.boot.loader.JarLauncher ^
+            --icon icon.ico ^
+            --type exe ^
+            --win-console ^
+            --dest dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrakOffPC-exe
+          path: dist
