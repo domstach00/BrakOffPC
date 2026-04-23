@@ -158,6 +158,15 @@ body::before {
     padding-bottom: 18px;
 }
 
+.archive-table-panel {
+    overflow: visible;
+    z-index: 20;
+}
+
+.archive-table-panel .table-shell {
+    overflow: visible;
+}
+
 .panel-header,
 .actions {
     display: flex;
@@ -560,7 +569,7 @@ button:disabled {
 .row-menu {
     position: relative;
     display: inline-block;
-    z-index: 2;
+    z-index: 30;
 }
 
 .row-menu-trigger {
@@ -586,7 +595,7 @@ button:disabled {
     position: absolute;
     right: 0;
     top: calc(100% + 8px);
-    z-index: 3;
+    z-index: 40;
     display: none;
     gap: 6px;
     min-width: 188px;
