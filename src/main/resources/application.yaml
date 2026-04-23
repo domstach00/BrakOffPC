@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: BrakOffPC
+  main:
+    headless: true
+  datasource:
+    url: jdbc:sqlite:./brakoffpc.db
+    driver-class-name: org.sqlite.JDBC
+  web:
+    error:
+      whitelabel:
+        enabled: false
+  sql:
+    init:
+      mode: always
+  thymeleaf:
+    cache: false
+
+server:
+  address: 0.0.0.0
+  port: 8080
+
+logging:
+  level:
+    org.wodrol.brakoffpc: INFO
+
+app:
+  ocr:
+    pdftoppm-command: pdftoppm
+    tesseract-command: tesseract
+    language: pol+eng
+    page-segmentation-mode: 6
+    dpi: 400
