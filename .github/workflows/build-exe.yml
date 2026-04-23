@@ -1,6 +1,8 @@
 name: Build EXE
 
-on: [push]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,39 +11,98 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
+          cache: maven
 
-      - name: Build jar
-        run: mvn clean package
-
-      - name: Find JAR
+      - name: Build application JAR
         shell: cmd
-        run: |
-          for %%f in (target\*jar) do (
-            echo %%f | findstr /v "original" >nul && set JAR=%%~nxf
-          )
-          echo Found JAR: %JAR%
-          echo JAR=%JAR%>>%GITHUB_ENV%
+        run: .\mvnw.cmd -B clean package
 
-      - name: Create EXE
-        shell: cmd
+      - name: Resolve build metadata
+        shell: pwsh
         run: |
-          jpackage ^
-            --name BrakOffPC ^
-            --input target ^
-            --main-jar %JAR% ^
-            --main-class org.springframework.boot.loader.JarLauncher ^
-            --icon icon.ico ^
-            --type exe ^
-            --win-console ^
-            --dest dist
+          $jar = Get-ChildItem -Path target -Filter *.jar |
+            Where-Object { $_.Name -notmatch 'original|plain' } |
+            Select-Object -First 1
 
-      - name: Upload artifact
+          if (-not $jar) {
+            throw "Packaged application JAR not found in target directory."
+          }
+
+          $pom = [xml](Get-Content pom.xml)
+          $version = $pom.project.version
+
+          "JAR_NAME=$($jar.Name)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create bundled Java 21 runtime
+        shell: pwsh
+        run: |
+          if (Test-Path build) {
+            Remove-Item build -Recurse -Force
+          }
+
+          jlink `
+            --output build\runtime `
+            --add-modules ALL-MODULE-PATH `
+            --strip-debug `
+            --no-header-files `
+            --no-man-pages `
+            --compress=2
+
+      - name: Create portable app image
+        shell: pwsh
+        run: |
+          if (Test-Path dist) {
+            Remove-Item dist -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path dist\app | Out-Null
+
+          jpackage `
+            --type app-image `
+            --dest dist\app `
+            --name BrakOffPC `
+            --input target `
+            --main-jar $env:JAR_NAME `
+            --main-class org.springframework.boot.loader.launch.JarLauncher `
+            --runtime-image build\runtime `
+            --icon icon.ico `
+            --vendor Wodrol `
+            --app-version $env:APP_VERSION `
+            --win-console
+
+      - name: Create Windows installer EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\installer | Out-Null
+
+          jpackage `
+            --type exe `
+            --dest dist\installer `
+            --app-image dist\app\BrakOffPC `
+            --icon icon.ico `
+            --vendor Wodrol `
+            --app-version $env:APP_VERSION `
+            --win-dir-chooser `
+            --win-menu `
+            --win-shortcut
+
+      - name: Create portable ZIP artifact
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist\app\BrakOffPC\* `
+            -DestinationPath dist\BrakOffPC-portable-win64.zip
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BrakOffPC-exe
-          path: dist
+          name: BrakOffPC-windows
+          path: |
+            dist/installer/*.exe
+            dist/BrakOffPC-portable-win64.zip
