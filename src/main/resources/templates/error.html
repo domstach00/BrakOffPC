@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pl" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Błąd | BrakOff PC</title>
+    <link rel="stylesheet" th:href="@{/styles.css}">
+</head>
+<body>
+<main class="page narrow">
+    <section class="panel panel-hero">
+        <p class="eyebrow">Brak Off</p>
+        <h1>Wystąpił błąd</h1>
+        <p class="lead">Żądanie nie mogło zostać obsłużone. Szczegóły poniżej pomagają ustalić przyczynę bez ukrywania właściwego błędu.</p>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Szczegóły</p>
+                <h2 th:text="${status != null ? 'HTTP ' + status : 'Nieoczekiwany problem'}">Nieoczekiwany problem</h2>
+            </div>
+        </div>
+
+        <div class="flash error" th:if="${error}" th:text="${error}"></div>
+        <p class="hint" th:if="${message}" th:text="${message}"></p>
+
+        <dl class="meta-list">
+            <div th:if="${path}">
+                <dt>Ścieżka</dt>
+                <dd class="mono" th:text="${path}"></dd>
+            </div>
+            <div th:if="${timestamp}">
+                <dt>Czas</dt>
+                <dd th:text="${timestamp}"></dd>
+            </div>
+        </dl>
+
+        <div class="actions">
+            <a class="button ghost" th:href="@{/}">Powrót do strony głównej</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>

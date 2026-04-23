@@ -3,9 +3,6 @@ spring:
     name: BrakOffPC
   main:
     headless: true
-  datasource:
-    url: jdbc:sqlite:./brakoffpc.db
-    driver-class-name: org.sqlite.JDBC
   web:
     error:
       whitelabel:
@@ -25,6 +22,8 @@ logging:
     org.wodrol.brakoffpc: INFO
 
 app:
+  sqlite:
+    path: ""
   ocr:
     pdftoppm-command: pdftoppm
     tesseract-command: tesseract
