@@ -4,12 +4,8 @@ on:
   push:
   workflow_dispatch:
 
-env:
-  BUILD_ON_PUSH: "true"
-
 jobs:
   build:
-    if: github.event_name != 'push' || env.BUILD_ON_PUSH == 'true'
     runs-on: windows-latest
 
     steps:
