@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  BUILD_ON_PUSH: "false"
+  BUILD_ON_PUSH: "true"
 
 jobs:
   build:
@@ -80,33 +80,19 @@ jobs:
             --app-version $env:APP_VERSION `
             --win-console
 
-      - name: Create Windows installer EXE
+      - name: Export app launcher EXE
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist\installer | Out-Null
+          $launcher = "dist\app\BrakOffPC\BrakOffPC.exe"
 
-          jpackage `
-            --type exe `
-            --dest dist\installer `
-            --app-image dist\app\BrakOffPC `
-            --icon icon.ico `
-            --vendor Wodrol `
-            --app-version $env:APP_VERSION `
-            --win-dir-chooser `
-            --win-menu `
-            --win-shortcut
+          if (-not (Test-Path $launcher)) {
+            throw "Application launcher EXE not found at $launcher"
+          }
 
-      - name: Create portable ZIP artifact
-        shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path dist\app\BrakOffPC\* `
-            -DestinationPath dist\BrakOffPC-portable-win64.zip
+          Copy-Item -Path $launcher -Destination dist\BrakOffPC.exe -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BrakOffPC-windows
-          path: |
-            dist/installer/*.exe
-            dist/BrakOffPC-portable-win64.zip
+          name: BrakOffPC-exe
+          path: dist/BrakOffPC.exe
