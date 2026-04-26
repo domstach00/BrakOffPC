@@ -52,18 +52,23 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $workspace = (Get-Location).Path
+          $jarPath = Join-Path $workspace "target\$env:JAR_NAME"
+          $outFile = Join-Path $workspace "dist\BrakOffPC.exe"
+          $iconPath = Join-Path $workspace "icon.ico"
+
+          if (-not (Test-Path $jarPath)) {
+            throw "Application JAR not found at $jarPath"
+          }
 
           $launch4jConfig = @"
           <launch4jConfig>
             <dontWrapJar>false</dontWrapJar>
             <headerType>console</headerType>
-            <jar>target\$env:JAR_NAME</jar>
-            <outfile>dist\BrakOffPC.exe</outfile>
+            <jar>$jarPath</jar>
+            <outfile>$outFile</outfile>
             <errTitle>BrakOffPC</errTitle>
-            <classPath>
-              <mainClass>org.springframework.boot.loader.launch.JarLauncher</mainClass>
-            </classPath>
-            <icon>icon.ico</icon>
+            <icon>$iconPath</icon>
             <jre>
               <path></path>
               <minVersion>21</minVersion>
