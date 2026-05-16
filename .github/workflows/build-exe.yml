@@ -107,10 +107,7 @@ jobs:
             --app-version $env:APP_VERSION `
             --vendor Wodrol `
             --description "BrakOff PC - lokalna kontrola dostaw" `
-            --icon $iconPath `
-            --win-menu `
-            --win-menu-group "BrakOff" `
-            --win-shortcut
+            --icon $iconPath
 
           if (-not (Test-Path $appImagePath)) {
             throw "jpackage did not generate dist\\BrakOffPC app image"
