@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 public class WindowsAutoStartService {
 
     private static final String STARTUP_SCRIPT_FILE_NAME = "BrakOffPC.vbs";
+    private static final byte[] UTF_16_LE_BOM = new byte[]{(byte) 0xFF, (byte) 0xFE};
     private final String osName;
     private final Map<String, String> environment;
     private final String userHome;
@@ -76,7 +77,13 @@ public class WindowsAutoStartService {
 
         Path startupScriptPath = startupScriptPath();
         Files.createDirectories(startupScriptPath.getParent());
-        Files.writeString(startupScriptPath, startupScriptContent(launcherPath), StandardCharsets.US_ASCII);
+        Files.write(startupScriptPath, startupScriptBytes(launcherPath));
+    }
+
+    public void refreshIfEnabled() throws IOException {
+        if (isEnabled()) {
+            setEnabled(true);
+        }
     }
 
     private Path startupScriptPath() {
@@ -85,8 +92,27 @@ public class WindowsAutoStartService {
 
     private String startupScriptContent(Path launcherPath) {
         return """
-                Set shell = CreateObject("WScript.Shell")
-                shell.Run "\"%s\"", 0, False
-                """.formatted(launcherPath.toString());
+                On Error Resume Next
+                Set fso = CreateObject("Scripting.FileSystemObject")
+                launcherPath = "%s"
+                If fso.FileExists(launcherPath) Then
+                    Set shell = CreateObject("WScript.Shell")
+                    shell.Run Chr(34) & launcherPath & Chr(34), 0, False
+                Else
+                    fso.DeleteFile WScript.ScriptFullName, True
+                End If
+                """.formatted(vbScriptStringValue(launcherPath.toString()));
+    }
+
+    private byte[] startupScriptBytes(Path launcherPath) {
+        byte[] content = startupScriptContent(launcherPath).getBytes(StandardCharsets.UTF_16LE);
+        byte[] bytes = new byte[UTF_16_LE_BOM.length + content.length];
+        System.arraycopy(UTF_16_LE_BOM, 0, bytes, 0, UTF_16_LE_BOM.length);
+        System.arraycopy(content, 0, bytes, UTF_16_LE_BOM.length, content.length);
+        return bytes;
+    }
+
+    private String vbScriptStringValue(String value) {
+        return value.replace("\"", "\"\"");
     }
 }

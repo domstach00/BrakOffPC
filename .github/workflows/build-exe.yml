@@ -138,11 +138,17 @@ jobs:
 
           Compress-Archive -Path $appImagePath -DestinationPath dist\BrakOffPC-app-image.zip
 
+          $resourceDir = Join-Path $workspace "dist\jpackage-resources"
+          & (Join-Path $workspace "packaging\windows\prepare-jpackage-resources.ps1") `
+            -JavaHome $env:JAVA_HOME `
+            -OutputDirectory $resourceDir
+
           & $jpackage `
             --type msi `
             --name BrakOffPC `
             --dest dist `
             --app-image $appImagePath `
+            --resource-dir $resourceDir `
             --app-version $env:APP_VERSION `
             --vendor Wodrol `
             --description "BrakOff PC - lokalna kontrola dostaw" `
