@@ -25,6 +25,8 @@ import java.util.stream.Stream;
 @Service
 public class TesseractPdfOcrService implements PdfOcrService {
 
+    private static final String DEFAULT_PDFTOPPM_COMMAND = "pdftoppm";
+    private static final String WINDOWS_PDFTOPPM_EXECUTABLE = "pdftoppm.exe";
     private static final String DEFAULT_TESSERACT_COMMAND = "tesseract";
     private static final String WINDOWS_TESSERACT_EXECUTABLE = "tesseract.exe";
     private final String pdftoppmCommand;
@@ -115,14 +117,9 @@ public class TesseractPdfOcrService implements PdfOcrService {
 
         Process process;
         try {
-            process = new ProcessBuilder(
-                    pdftoppmCommand,
-                    "-r",
-                    String.valueOf(Math.round(dpi)),
-                    "-png",
-                    pdfPath.toString(),
-                    tempDirectory.resolve("page").toString()
-            ).redirectErrorStream(true).start();
+            process = new ProcessBuilder(pdftoppmCommand(pdfPath, tempDirectory.resolve("page")))
+                    .redirectErrorStream(true)
+                    .start();
         } catch (IOException exception) {
             return List.of();
         }
@@ -148,6 +145,17 @@ public class TesseractPdfOcrService implements PdfOcrService {
                     .sorted()
                     .toList();
         }
+    }
+
+    List<String> pdftoppmCommand(Path pdfPath, Path outputPrefix) {
+        return List.of(
+                resolvePdftoppmExecutable(),
+                "-r",
+                String.valueOf(Math.round(dpi)),
+                "-png",
+                pdfPath.toString(),
+                outputPrefix.toString()
+        );
     }
 
     private String runTesseract(Path imagePath) throws IOException {
@@ -200,6 +208,46 @@ public class TesseractPdfOcrService implements PdfOcrService {
         return command;
     }
 
+    private String resolvePdftoppmExecutable() {
+        if (!usesDefaultPdftoppmCommand() || !AppPaths.isWindows(osName)) {
+            return pdftoppmCommand;
+        }
+
+        return detectBundledPdftoppm()
+                .map(Path::toString)
+                .orElse(pdftoppmCommand);
+    }
+
+    private Optional<Path> detectBundledPdftoppm() {
+        return launcherPathSupplier.get()
+                .map(Path::getParent)
+                .flatMap(this::findBundledPdftoppm);
+    }
+
+    private Optional<Path> findBundledPdftoppm(Path appDirectory) {
+        for (Path candidatePath : bundledPdftoppmPaths(appDirectory)) {
+            if (Files.isRegularFile(candidatePath)) {
+                return Optional.of(candidatePath);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private List<Path> bundledPdftoppmPaths(Path appDirectory) {
+        return List.of(
+                appDirectory.resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("pdftoppm").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("poppler").resolve("bin").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("tools").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("tools").resolve("pdftoppm").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("tools").resolve("poppler").resolve("bin").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("app").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("app").resolve("pdftoppm").resolve(WINDOWS_PDFTOPPM_EXECUTABLE),
+                appDirectory.resolve("app").resolve("poppler").resolve("bin").resolve(WINDOWS_PDFTOPPM_EXECUTABLE)
+        );
+    }
+
     private TesseractExecutable resolveTesseractExecutable() {
         if (!usesDefaultTesseractCommand() || !AppPaths.isWindows(osName)) {
             return new TesseractExecutable(tesseractCommand, Optional.empty());
@@ -236,6 +284,16 @@ public class TesseractPdfOcrService implements PdfOcrService {
                 appDirectory.resolve("tools").resolve("tesseract"),
                 appDirectory.resolve("app").resolve("tesseract")
         );
+    }
+
+    private boolean usesDefaultPdftoppmCommand() {
+        if (pdftoppmCommand == null || pdftoppmCommand.isBlank()) {
+            return true;
+        }
+
+        String command = pdftoppmCommand.trim();
+        return DEFAULT_PDFTOPPM_COMMAND.equalsIgnoreCase(command)
+                || WINDOWS_PDFTOPPM_EXECUTABLE.equalsIgnoreCase(command);
     }
 
     private boolean usesDefaultTesseractCommand() {
