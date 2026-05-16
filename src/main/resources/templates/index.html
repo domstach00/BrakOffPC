@@ -98,25 +98,43 @@
                 </div>
                 <span class="count-badge" th:text="${serverPort}"></span>
             </div>
-            <div class="api-list" th:if="${!#lists.isEmpty(localEndpoints)}">
-                <div class="api-item">
-                    <code th:text="${localEndpoints[0]}"></code>
-                    <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres z listy poniżej</p>
-                </div>
-                <details class="api-more" th:if="${#lists.size(localEndpoints) > 1}">
-                    <summary th:text="${'Pokaz pozostale adresy (' + (#lists.size(localEndpoints) - 1) + ')'}"></summary>
-                    <div class="api-list api-list-more">
-                        <th:block th:each="endpoint, iter : ${localEndpoints}">
-                            <div class="api-item" th:if="${iter.index > 0}">
-                                <code th:text="${endpoint}"></code>
+            <div class="network-panel-body">
+                <div>
+                    <div class="api-list" th:if="${!#lists.isEmpty(localEndpoints)}">
+                        <div class="api-item">
+                            <code th:text="${localEndpoints[0]}"></code>
+                            <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres z listy poniżej</p>
+                        </div>
+                        <details class="api-more" th:if="${#lists.size(localEndpoints) > 1}">
+                            <summary th:text="${'Pokaz pozostale adresy (' + (#lists.size(localEndpoints) - 1) + ')'}"></summary>
+                            <div class="api-list api-list-more">
+                                <th:block th:each="endpoint, iter : ${localEndpoints}">
+                                    <div class="api-item" th:if="${iter.index > 0}">
+                                        <code th:text="${endpoint}"></code>
+                                    </div>
+                                </th:block>
                             </div>
-                        </th:block>
+                        </details>
                     </div>
-                </details>
-            </div>
-            <div class="empty-state" th:if="${#lists.isEmpty(localEndpoints)}">
-                <strong>Nie udało się wykryć lokalnego IP</strong>
-                <p>Sprawdź adres IPv4 tego komputera w ustawieniach sieci i połącz się na porcie <span class="mono" th:text="${serverPort}"></span>.</p>
+                    <div class="empty-state" th:if="${#lists.isEmpty(localEndpoints)}">
+                        <strong>Nie udało się wykryć lokalnego IP</strong>
+                        <p>Sprawdź adres IPv4 tego komputera w ustawieniach sieci i połącz się na porcie <span class="mono" th:text="${serverPort}"></span>.</p>
+                    </div>
+                </div>
+                <aside class="download-qr-card">
+                    <p class="download-qr-label">Aplikacja Android</p>
+                    <a class="download-qr-image"
+                       href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
+                       target="_blank"
+                       rel="noreferrer"
+                       aria-label="Pobierz aplikację BrakOff na telefon z Androidem">
+                        <img th:src="@{/BrakOff-app-qr.png}" alt="Kod QR do pobrania aplikacji BrakOff na Android">
+                    </a>
+                    <a class="download-qr-link"
+                       href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
+                       target="_blank"
+                       rel="noreferrer">Pobierz APK</a>
+                </aside>
             </div>
         </article>
     </section>
