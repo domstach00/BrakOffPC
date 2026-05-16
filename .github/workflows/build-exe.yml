@@ -1,4 +1,4 @@
-name: Build EXE
+name: Build Windows Installer
 
 on:
   push:
@@ -39,12 +39,12 @@ jobs:
           "JAR_NAME=$($jar.Name)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install Launch4j
+      - name: Install WiX Toolset
         shell: pwsh
         run: |
-          choco install launch4j --no-progress -y
+          choco install wixtoolset --no-progress -y
 
-      - name: Build Windows EXE launcher
+      - name: Build Windows app image and MSI installer
         shell: pwsh
         run: |
           if (Test-Path dist) {
@@ -53,45 +53,64 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $workspace = (Get-Location).Path
-          $jarPath = Join-Path $workspace "target\$env:JAR_NAME"
-          $outFile = Join-Path $workspace "dist\BrakOffPC.exe"
           $iconPath = Join-Path $workspace "icon.ico"
+          $jpackage = Join-Path $env:JAVA_HOME "bin\jpackage.exe"
+          $appImagePath = Join-Path $workspace "dist\BrakOffPC"
+          $msiPath = Join-Path $workspace "dist\BrakOffPC-$env:APP_VERSION.msi"
+          $upgradeUuid = "e1be6b72-d7fb-4b35-b8b2-a529ec1938d5"
 
-          if (-not (Test-Path $jarPath)) {
-            throw "Application JAR not found at $jarPath"
+          if (-not (Test-Path $jpackage)) {
+            throw "jpackage executable not found at $jpackage"
           }
 
-          $launch4jConfig = @"
-          <launch4jConfig>
-            <dontWrapJar>false</dontWrapJar>
-            <headerType>console</headerType>
-            <jar>$jarPath</jar>
-            <outfile>$outFile</outfile>
-            <errTitle>BrakOffPC</errTitle>
-            <icon>$iconPath</icon>
-            <jre>
-              <path></path>
-              <minVersion>21</minVersion>
-              <requiresJdk>false</requiresJdk>
-            </jre>
-          </launch4jConfig>
-          "@
+          & $jpackage `
+            --type app-image `
+            --name BrakOffPC `
+            --dest dist `
+            --input target `
+            --main-jar $env:JAR_NAME `
+            --main-class org.springframework.boot.loader.launch.JarLauncher `
+            --app-version $env:APP_VERSION `
+            --vendor Wodrol `
+            --description "BrakOff PC - lokalna kontrola dostaw" `
+            --about-url "https://github.com/domstach00/BrakOff" `
+            --icon $iconPath `
+            --win-menu `
+            --win-menu-group "BrakOff" `
+            --win-shortcut
 
-          Set-Content -Path dist\launch4j.xml -Value $launch4jConfig -Encoding utf8
-
-          $launch4j = "${env:ProgramFiles(x86)}\Launch4j\launch4jc.exe"
-          if (-not (Test-Path $launch4j)) {
-            throw "Launch4j executable not found at $launch4j"
+          if (-not (Test-Path $appImagePath)) {
+            throw "jpackage did not generate dist\\BrakOffPC app image"
           }
 
-          & $launch4j dist\launch4j.xml
+          Compress-Archive -Path $appImagePath -DestinationPath dist\BrakOffPC-app-image.zip
 
-          if (-not (Test-Path dist\BrakOffPC.exe)) {
-            throw "Launch4j did not generate dist\\BrakOffPC.exe"
+          & $jpackage `
+            --type msi `
+            --name BrakOffPC `
+            --dest dist `
+            --app-image $appImagePath `
+            --app-version $env:APP_VERSION `
+            --vendor Wodrol `
+            --description "BrakOff PC - lokalna kontrola dostaw" `
+            --about-url "https://github.com/domstach00/BrakOff" `
+            --icon $iconPath `
+            --win-dir-chooser `
+            --win-menu `
+            --win-menu-group "BrakOff" `
+            --win-shortcut `
+            --win-shortcut-prompt `
+            --win-per-user-install `
+            --win-upgrade-uuid $upgradeUuid
+
+          if (-not (Test-Path $msiPath)) {
+            throw "jpackage did not generate MSI installer at $msiPath"
           }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BrakOffPC-exe
-          path: dist/BrakOffPC.exe
+          name: BrakOffPC-windows-installer
+          path: |
+            dist/BrakOffPC-*.msi
+            dist/BrakOffPC-app-image.zip

@@ -87,6 +87,14 @@ body::before {
     margin-bottom: 22px;
 }
 
+.single-panel-row {
+    margin-bottom: 22px;
+}
+
+.single-panel-row .panel {
+    width: 100%;
+}
+
 .panel {
     position: relative;
     overflow: hidden;
@@ -527,6 +535,33 @@ button:disabled {
     line-height: 1.4;
 }
 
+.active-delivery-panel .meta-list {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin-bottom: 24px;
+}
+
+.active-delivery-panel .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.active-delivery-panel .actions > .button {
+    flex: 1 1 220px;
+}
+
+.active-delivery-panel .actions form {
+    flex: 0 0 220px;
+    margin: 0 0 0 auto;
+}
+
+.active-delivery-panel .actions .button,
+.active-delivery-panel .actions button {
+    width: 100%;
+    min-height: 46px;
+}
+
 .api-list {
     display: grid;
     gap: 14px;
@@ -623,6 +658,43 @@ button:disabled {
 
 .download-qr-link:hover {
     text-decoration: underline;
+}
+
+.startup-settings-form {
+    display: grid;
+    gap: 14px;
+}
+
+.setting-option {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    padding: 14px 0;
+    border-top: 1px solid rgba(16, 32, 51, 0.08);
+}
+
+.setting-option:first-of-type {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.setting-option-disabled {
+    opacity: 0.72;
+}
+
+.setting-copy {
+    display: grid;
+    gap: 4px;
+}
+
+.setting-copy strong {
+    font-size: 0.96rem;
+}
+
+.setting-copy small {
+    color: var(--muted);
+    line-height: 1.55;
 }
 
 .row-menu {
@@ -884,6 +956,10 @@ code {
 
     .download-qr-card {
         width: fit-content;
+    }
+
+    .setting-option {
+        grid-template-columns: 20px minmax(0, 1fr);
     }
 
     .review-summary {

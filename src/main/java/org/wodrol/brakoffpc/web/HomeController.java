@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.wodrol.brakoffpc.desktop.AppStartupSettings;
+import org.wodrol.brakoffpc.desktop.AppStartupSettingsService;
+import org.wodrol.brakoffpc.desktop.WindowsAutoStartService;
 import org.wodrol.brakoffpc.delivery.DeliveryService;
 import org.wodrol.brakoffpc.imports.ImportDraft;
 import org.wodrol.brakoffpc.imports.ImportDraftItem;
@@ -43,15 +46,21 @@ public class HomeController {
     private final PendingImportService pendingImportService;
     private final DeliveryService deliveryService;
     private final NetworkInfoService networkInfoService;
+    private final AppStartupSettingsService appStartupSettingsService;
+    private final WindowsAutoStartService windowsAutoStartService;
 
     public HomeController(
             PendingImportService pendingImportService,
             DeliveryService deliveryService,
-            NetworkInfoService networkInfoService
+            NetworkInfoService networkInfoService,
+            AppStartupSettingsService appStartupSettingsService,
+            WindowsAutoStartService windowsAutoStartService
     ) {
         this.pendingImportService = pendingImportService;
         this.deliveryService = deliveryService;
         this.networkInfoService = networkInfoService;
+        this.appStartupSettingsService = appStartupSettingsService;
+        this.windowsAutoStartService = windowsAutoStartService;
     }
 
     @GetMapping("/")
@@ -71,8 +80,26 @@ public class HomeController {
                 .toList());
         model.addAttribute("message", message);
         model.addAttribute("error", error);
+        populateStartupSettings(model);
         populateDashboardSummary(model, dashboardRows);
         return "index";
+    }
+
+    @PostMapping("/settings/startup")
+    public String updateStartupSettings(
+            @RequestParam(name = "openBrowserOnStartup", defaultValue = "false") boolean openBrowserOnStartup,
+            @RequestParam(name = "autoStartWithWindows", defaultValue = "false") boolean autoStartWithWindows,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            windowsAutoStartService.setEnabled(autoStartWithWindows);
+            appStartupSettingsService.save(new AppStartupSettings(openBrowserOnStartup));
+            redirectAttributes.addFlashAttribute("message", "Zapisano ustawienia uruchamiania aplikacji.");
+        } catch (IllegalStateException | java.io.IOException exception) {
+            log.warn("Nie udalo sie zapisac ustawien uruchamiania powod={}", exception.getMessage());
+            redirectAttributes.addFlashAttribute("error", exception.getMessage());
+        }
+        return "redirect:/";
     }
 
     @GetMapping("/deliveries/archive")
@@ -509,6 +536,14 @@ public class HomeController {
         model.addAttribute("dashboardScannedTotal", scannedTotal);
         model.addAttribute("dashboardDifferenceTotal", diffTotal);
         model.addAttribute("dashboardDifferenceLabel", diffLabel);
+    }
+
+    private void populateStartupSettings(Model model) {
+        AppStartupSettings startupSettings = appStartupSettingsService.load();
+        model.addAttribute("openBrowserOnStartup", startupSettings.openBrowserOnStartup());
+        model.addAttribute("windowsAutoStartEnabled", windowsAutoStartService.isEnabled());
+        model.addAttribute("windowsAutoStartAvailable", windowsAutoStartService.isConfigurable());
+        model.addAttribute("windowsAutoStartHint", windowsAutoStartService.availabilityHint());
     }
 
     private String formatDashboardDifferenceLabel(int diffTotal) {

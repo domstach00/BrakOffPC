@@ -1,0 +1,42 @@
+package org.wodrol.brakoffpc.desktop;
+
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Service;
+
+@Service
+public class DesktopStartupCoordinator {
+
+    private final AppStartupSettingsService appStartupSettingsService;
+    private final ApplicationContext applicationContext;
+
+    public DesktopStartupCoordinator(
+            AppStartupSettingsService appStartupSettingsService,
+            ApplicationContext applicationContext
+    ) {
+        this.appStartupSettingsService = appStartupSettingsService;
+        this.applicationContext = applicationContext;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void openBrowserAfterStartup() {
+        if (!DesktopLauncherSupport.isPackagedLaunch()) {
+            return;
+        }
+
+        if (!appStartupSettingsService.load().openBrowserOnStartup()) {
+            return;
+        }
+
+        if (!(applicationContext instanceof WebServerApplicationContext webServerApplicationContext)) {
+            return;
+        }
+
+        DesktopLauncherSupport.openInBrowser(
+                "http://127.0.0.1:" + webServerApplicationContext.getWebServer().getPort() + "/",
+                System.getProperty("os.name")
+        );
+    }
+}

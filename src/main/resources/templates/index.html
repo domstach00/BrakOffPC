@@ -48,10 +48,13 @@
     <div class="flash success" th:if="${T(org.apache.commons.lang3.StringUtils).isNotBlank(message)}" th:text="${message}"></div>
     <div class="flash error" th:if="${T(org.apache.commons.lang3.StringUtils).isNotBlank(error)}" th:text="${error}"></div>
 
-    <section class="grid">
-        <article class="panel">
-            <div class="panel-header">
-                <h2>Aktywna dostawa</h2>
+    <section class="single-panel-row">
+        <article class="panel active-delivery-panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Bieżąca praca</p>
+                    <h2>Aktywna dostawa</h2>
+                </div>
                 <span class="badge"
                       th:classappend="${activeDelivery != null ? ' badge-ok' : ''}"
                       th:title="${activeDelivery != null ? T(org.wodrol.brakoffpc.delivery.DeliveryStatus).description(activeDelivery.status()) : 'Brak aktywnej dostawy do skanowania.'}"
@@ -87,54 +90,6 @@
                 <div class="actions margin-top-5px">
                     <a class="button ghost" th:href="@{/deliveries/archive}">Archiwum dostaw</a>
                 </div>
-            </div>
-        </article>
-
-        <article class="panel">
-            <div class="panel-heading">
-                <div>
-                    <p class="section-kicker">Połączenie w sieci lokalnej</p>
-                    <h2>Adres dla telefonów</h2>
-                </div>
-                <span class="count-badge" th:text="${serverPort}"></span>
-            </div>
-            <div class="network-panel-body">
-                <div>
-                    <div class="api-list" th:if="${!#lists.isEmpty(localEndpoints)}">
-                        <div class="api-item">
-                            <code th:text="${localEndpoints[0]}"></code>
-                            <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres z listy poniżej</p>
-                        </div>
-                        <details class="api-more" th:if="${#lists.size(localEndpoints) > 1}">
-                            <summary th:text="${'Pokaz pozostale adresy (' + (#lists.size(localEndpoints) - 1) + ')'}"></summary>
-                            <div class="api-list api-list-more">
-                                <th:block th:each="endpoint, iter : ${localEndpoints}">
-                                    <div class="api-item" th:if="${iter.index > 0}">
-                                        <code th:text="${endpoint}"></code>
-                                    </div>
-                                </th:block>
-                            </div>
-                        </details>
-                    </div>
-                    <div class="empty-state" th:if="${#lists.isEmpty(localEndpoints)}">
-                        <strong>Nie udało się wykryć lokalnego IP</strong>
-                        <p>Sprawdź adres IPv4 tego komputera w ustawieniach sieci i połącz się na porcie <span class="mono" th:text="${serverPort}"></span>.</p>
-                    </div>
-                </div>
-                <aside class="download-qr-card">
-                    <p class="download-qr-label">Aplikacja Android</p>
-                    <a class="download-qr-image"
-                       href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
-                       target="_blank"
-                       rel="noreferrer"
-                       aria-label="Pobierz aplikację BrakOff na telefon z Androidem">
-                        <img th:src="@{/BrakOff-app-qr.png}" alt="Kod QR do pobrania aplikacji BrakOff na Android">
-                    </a>
-                    <a class="download-qr-link"
-                       href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
-                       target="_blank"
-                       rel="noreferrer">Pobierz APK</a>
-                </aside>
             </div>
         </article>
     </section>
@@ -221,6 +176,89 @@
             <strong>Brak danych z telefonów</strong>
             <p>Widok per urządzenie uzupełni się automatycznie po pierwszych skanach z Androida.</p>
         </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Połączenie w sieci lokalnej</p>
+                <h2>Adres dla telefonów</h2>
+            </div>
+            <span class="count-badge" th:text="${serverPort}"></span>
+        </div>
+        <div class="network-panel-body">
+            <div>
+                <div class="api-list" th:if="${!#lists.isEmpty(localEndpoints)}">
+                    <div class="api-item">
+                        <code th:text="${localEndpoints[0]}"></code>
+                        <p>W aplikacji BrakOff wejdź w ustawienia (koło zębate) i w polu 'Adres serwera PC' wpisz powyższy tekst, zapisz i Testuj połączenie. Jeśli pierwszy adres nie działa, wpisz ten adres w aplikacji i ponownie przetestuj połączenie. Jeśli nie zadziała wybierz inny adres z listy poniżej</p>
+                    </div>
+                    <details class="api-more" th:if="${#lists.size(localEndpoints) > 1}">
+                        <summary th:text="${'Pokaz pozostale adresy (' + (#lists.size(localEndpoints) - 1) + ')'}"></summary>
+                        <div class="api-list api-list-more">
+                            <th:block th:each="endpoint, iter : ${localEndpoints}">
+                                <div class="api-item" th:if="${iter.index > 0}">
+                                    <code th:text="${endpoint}"></code>
+                                </div>
+                            </th:block>
+                        </div>
+                    </details>
+                </div>
+                <div class="empty-state" th:if="${#lists.isEmpty(localEndpoints)}">
+                    <strong>Nie udało się wykryć lokalnego IP</strong>
+                    <p>Sprawdź adres IPv4 tego komputera w ustawieniach sieci i połącz się na porcie <span class="mono" th:text="${serverPort}"></span>.</p>
+                </div>
+            </div>
+            <aside class="download-qr-card">
+                <p class="download-qr-label">Aplikacja Android</p>
+                <a class="download-qr-image"
+                   href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
+                   target="_blank"
+                   rel="noreferrer"
+                   aria-label="Pobierz aplikację BrakOff na telefon z Androidem">
+                    <img th:src="@{/BrakOff-app-qr.png}" alt="Kod QR do pobrania aplikacji BrakOff na Android">
+                </a>
+                <a class="download-qr-link"
+                   href="https://github.com/domstach00/BrakOff/releases/latest/download/BrakOff.apk"
+                   target="_blank"
+                   rel="noreferrer">Pobierz APK</a>
+            </aside>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Ten komputer</p>
+                <h2>Uruchamianie aplikacji</h2>
+            </div>
+            <span class="count-badge" th:text="${windowsAutoStartEnabled ? 'Autostart wlaczony' : 'Start reczny'}"></span>
+        </div>
+        <form method="post" th:action="@{/settings/startup}" class="startup-settings-form">
+            <label class="setting-option">
+                <input type="checkbox" name="openBrowserOnStartup" value="true" th:checked="${openBrowserOnStartup}">
+                <span class="setting-copy">
+                    <strong>Otwórz panel w przeglądarce po uruchomieniu</strong>
+                    <small>Po kliknięciu skrótu od razu otworzy się panel BrakOff.</small>
+                </span>
+            </label>
+
+            <label class="setting-option" th:classappend="${!windowsAutoStartAvailable ? ' setting-option-disabled' : ''}">
+                <input type="checkbox"
+                       name="autoStartWithWindows"
+                       value="true"
+                       th:checked="${windowsAutoStartEnabled}"
+                       th:disabled="${!windowsAutoStartAvailable}">
+                <span class="setting-copy">
+                    <strong>Uruchamiaj BrakOff przy starcie Windows</strong>
+                    <small th:text="${windowsAutoStartHint}"></small>
+                </span>
+            </label>
+
+            <div class="actions">
+                <button type="submit">Zapisz ustawienia</button>
+            </div>
+        </form>
     </section>
 </main>
 <script>

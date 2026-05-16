@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Locale;
 
 @Configuration
 public class SqliteConfig {
@@ -65,38 +64,6 @@ public class SqliteConfig {
     }
 
     private static Path defaultDatabasePath(String osName, Map<String, String> environment, String userHome) {
-        String normalizedOsName = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
-        if (normalizedOsName.contains("win")) {
-            Path localAppDataPath = pathFromEnv(environment, "LOCALAPPDATA");
-            if (localAppDataPath != null) {
-                return localAppDataPath.resolve("BrakOffPC").resolve("brakoffpc.db").toAbsolutePath().normalize();
-            }
-
-            Path appDataPath = pathFromEnv(environment, "APPDATA");
-            if (appDataPath != null) {
-                return appDataPath.resolve("BrakOffPC").resolve("brakoffpc.db").toAbsolutePath().normalize();
-            }
-
-            return Path.of(userHome, "AppData", "Local", "BrakOffPC", "brakoffpc.db")
-                    .toAbsolutePath()
-                    .normalize();
-        }
-
-        Path xdgDataHomePath = pathFromEnv(environment, "XDG_DATA_HOME");
-        if (xdgDataHomePath != null) {
-            return xdgDataHomePath.resolve("brakoffpc").resolve("brakoffpc.db").toAbsolutePath().normalize();
-        }
-
-        return Path.of(userHome, ".local", "share", "brakoffpc", "brakoffpc.db")
-                .toAbsolutePath()
-                .normalize();
-    }
-
-    private static Path pathFromEnv(Map<String, String> environment, String variableName) {
-        String value = environment.get(variableName);
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return Path.of(value);
+        return AppPaths.resolveAppDataDirectory(osName, environment, userHome).resolve("brakoffpc.db");
     }
 }
