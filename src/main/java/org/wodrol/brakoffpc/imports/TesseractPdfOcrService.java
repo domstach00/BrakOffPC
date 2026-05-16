@@ -3,8 +3,11 @@ package org.wodrol.brakoffpc.imports;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.wodrol.brakoffpc.config.AppPaths;
+import org.wodrol.brakoffpc.desktop.DesktopLauncherSupport;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -12,19 +15,27 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 @Service
 public class TesseractPdfOcrService implements PdfOcrService {
 
+    private static final String DEFAULT_TESSERACT_COMMAND = "tesseract";
+    private static final String WINDOWS_TESSERACT_EXECUTABLE = "tesseract.exe";
     private final String pdftoppmCommand;
     private final String tesseractCommand;
     private final String language;
     private final int pageSegmentationMode;
     private final float dpi;
+    private final String osName;
+    private final Supplier<Optional<Path>> launcherPathSupplier;
 
+    @Autowired
     public TesseractPdfOcrService(
             @Value("${app.ocr.pdftoppm-command:pdftoppm}") String pdftoppmCommand,
             @Value("${app.ocr.tesseract-command:tesseract}") String tesseractCommand,
@@ -32,11 +43,33 @@ public class TesseractPdfOcrService implements PdfOcrService {
             @Value("${app.ocr.page-segmentation-mode:6}") int pageSegmentationMode,
             @Value("${app.ocr.dpi:400}") float dpi
     ) {
+        this(
+                pdftoppmCommand,
+                tesseractCommand,
+                language,
+                pageSegmentationMode,
+                dpi,
+                System.getProperty("os.name"),
+                DesktopLauncherSupport::detectLauncherPath
+        );
+    }
+
+    TesseractPdfOcrService(
+            String pdftoppmCommand,
+            String tesseractCommand,
+            String language,
+            int pageSegmentationMode,
+            float dpi,
+            String osName,
+            Supplier<Optional<Path>> launcherPathSupplier
+    ) {
         this.pdftoppmCommand = pdftoppmCommand;
         this.tesseractCommand = tesseractCommand;
         this.language = language;
         this.pageSegmentationMode = pageSegmentationMode;
         this.dpi = dpi;
+        this.osName = osName;
+        this.launcherPathSupplier = launcherPathSupplier;
     }
 
     @Override
@@ -120,15 +153,12 @@ public class TesseractPdfOcrService implements PdfOcrService {
     private String runTesseract(Path imagePath) throws IOException {
         Process process;
         try {
-            process = new ProcessBuilder(
-                    tesseractCommand,
-                    imagePath.toString(),
-                    "stdout",
-                    "-l",
-                    language,
-                    "--psm",
-                    String.valueOf(pageSegmentationMode)
-            ).redirectErrorStream(true).start();
+            TesseractExecutable executable = resolveTesseractExecutable();
+            ProcessBuilder processBuilder = new ProcessBuilder(tesseractCommand(imagePath, executable));
+            processBuilder.redirectErrorStream(true);
+            executable.tessdataDirectory()
+                    .ifPresent(tessdataDirectory -> processBuilder.environment().put("TESSDATA_PREFIX", tessdataDirectory.toString()));
+            process = processBuilder.start();
         } catch (IOException exception) {
             throw new PdfImportException("OCR wymaga lokalnie dostepnego polecenia 'tesseract' w systemowym PATH.", exception);
         }
@@ -147,6 +177,77 @@ public class TesseractPdfOcrService implements PdfOcrService {
         }
     }
 
+    List<String> tesseractCommand(Path imagePath) {
+        return tesseractCommand(imagePath, resolveTesseractExecutable());
+    }
+
+    private List<String> tesseractCommand(Path imagePath, TesseractExecutable executable) {
+        List<String> command = new ArrayList<>(List.of(
+                executable.command(),
+                imagePath.toString(),
+                "stdout",
+                "-l",
+                language,
+                "--psm",
+                String.valueOf(pageSegmentationMode)
+        ));
+
+        executable.tessdataDirectory().ifPresent(tessdataDirectory -> {
+            command.add("--tessdata-dir");
+            command.add(tessdataDirectory.toString());
+        });
+
+        return command;
+    }
+
+    private TesseractExecutable resolveTesseractExecutable() {
+        if (!usesDefaultTesseractCommand() || !AppPaths.isWindows(osName)) {
+            return new TesseractExecutable(tesseractCommand, Optional.empty());
+        }
+
+        return detectBundledTesseract()
+                .orElseGet(() -> new TesseractExecutable(tesseractCommand, Optional.empty()));
+    }
+
+    private Optional<TesseractExecutable> detectBundledTesseract() {
+        return launcherPathSupplier.get()
+                .map(Path::getParent)
+                .flatMap(this::findBundledTesseract);
+    }
+
+    private Optional<TesseractExecutable> findBundledTesseract(Path appDirectory) {
+        for (Path candidateDirectory : bundledTesseractDirectories(appDirectory)) {
+            Path executablePath = candidateDirectory.resolve(WINDOWS_TESSERACT_EXECUTABLE);
+            if (Files.isRegularFile(executablePath)) {
+                Path tessdataDirectory = candidateDirectory.resolve("tessdata");
+                return Optional.of(new TesseractExecutable(
+                        executablePath.toString(),
+                        Files.isDirectory(tessdataDirectory) ? Optional.of(tessdataDirectory) : Optional.empty()
+                ));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private List<Path> bundledTesseractDirectories(Path appDirectory) {
+        return List.of(
+                appDirectory.resolve("tesseract"),
+                appDirectory.resolve("tools").resolve("tesseract"),
+                appDirectory.resolve("app").resolve("tesseract")
+        );
+    }
+
+    private boolean usesDefaultTesseractCommand() {
+        if (tesseractCommand == null || tesseractCommand.isBlank()) {
+            return true;
+        }
+
+        String command = tesseractCommand.trim();
+        return DEFAULT_TESSERACT_COMMAND.equalsIgnoreCase(command)
+                || WINDOWS_TESSERACT_EXECUTABLE.equalsIgnoreCase(command);
+    }
+
     private void deleteQuietly(Path directory) {
         if (directory == null) {
             return;
@@ -161,5 +262,8 @@ public class TesseractPdfOcrService implements PdfOcrService {
             });
         } catch (IOException ignored) {
         }
+    }
+
+    private record TesseractExecutable(String command, Optional<Path> tessdataDirectory) {
     }
 }
