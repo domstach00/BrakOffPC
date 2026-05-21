@@ -94,10 +94,13 @@ Wklej:
 
 ```bash
 SPRING_PROFILES_ACTIVE=prod
+SERVER_PORT=8080
 BRAKOFF_OPERATOR_USERNAME=admin
 BRAKOFF_OPERATOR_PASSWORD=TU_WPISZ_MOCNE_HASLO_OPERATORA
 BRAKOFF_MOBILE_API_TOKEN=TU_WPISZ_DLUGI_LOSOWY_TOKEN_DLA_TELEFONOW
 ```
+
+`SERVER_PORT` określa lokalny port aplikacji na VPS. Jeżeli zmienisz tę wartość, użyj tego samego portu w konfiguracji Cloudflare Tunnel i w lokalnych komendach diagnostycznych.
 
 Zabezpiecz plik:
 
@@ -215,6 +218,12 @@ ingress:
 
 Podmień `ID_TUNELU.json` na faktyczną nazwę pliku credentials utworzonego przez `cloudflared`.
 
+Jeżeli w `/etc/brakoffpc/brakoffpc.env` ustawiono inny `SERVER_PORT` niż `8080`, zmień też port w linii:
+
+```yaml
+service: http://127.0.0.1:PORT_Z_ENV
+```
+
 Dodaj rekord DNS dla tunelu:
 
 ```bash
@@ -257,7 +266,7 @@ sudo ufw enable
 sudo ufw status
 ```
 
-Nie otwieraj portu `8080` publicznie. Aplikacja w profilu `prod` słucha tylko na `127.0.0.1`, więc jest dostępna lokalnie dla Cloudflare Tunnel.
+Nie otwieraj portu aplikacji publicznie. Aplikacja w profilu `prod` słucha tylko na `127.0.0.1`, więc jest dostępna lokalnie dla Cloudflare Tunnel.
 
 ## 10. Pierwsze uruchomienie panelu
 
@@ -390,7 +399,7 @@ Najczęstsze przyczyny:
 - brak zmiennych `BRAKOFF_OPERATOR_USERNAME`, `BRAKOFF_OPERATOR_PASSWORD`, `BRAKOFF_MOBILE_API_TOKEN`,
 - brak Javy 21,
 - brak uprawnień do `/var/lib/brakoffpc`,
-- port `8080` zajęty przez inny proces.
+- port ustawiony w `SERVER_PORT` zajęty przez inny proces.
 
 ### Panel działa, ale telefon dostaje 401
 
@@ -434,4 +443,4 @@ Sprawdź lokalnie aplikację:
 curl http://127.0.0.1:8080/api/health
 ```
 
-Jeżeli lokalnie działa, problem jest po stronie Cloudflare Tunnel albo DNS.
+Jeżeli `SERVER_PORT` ma inną wartość niż `8080`, użyj tej wartości w adresie lokalnym. Jeżeli lokalnie działa, problem jest po stronie Cloudflare Tunnel albo DNS.
