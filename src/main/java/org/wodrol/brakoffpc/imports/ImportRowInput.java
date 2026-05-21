@@ -5,6 +5,7 @@ public class ImportRowInput {
     private String barcode;
     private String name;
     private String expectedQty;
+    private boolean deleted;
 
     public String getBarcode() {
         return barcode;
@@ -28,5 +29,13 @@ public class ImportRowInput {
 
     public void setExpectedQty(String expectedQty) {
         this.expectedQty = expectedQty;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
     }
 }

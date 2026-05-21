@@ -72,6 +72,10 @@ body::before {
     width: min(1040px, calc(100% - 32px));
 }
 
+.page.workbench-page {
+    width: min(1480px, calc(100% - 32px));
+}
+
 .hero,
 .grid {
     display: grid;
@@ -397,6 +401,28 @@ button.ghost,
 button.danger {
     background: linear-gradient(135deg, #cc5b62 0%, var(--danger) 100%);
     box-shadow: 0 14px 24px rgba(183, 71, 77, 0.24);
+}
+
+.icon-button {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.icon-button.danger-ghost {
+    border: 1px solid rgba(183, 71, 77, 0.2);
+    background: var(--danger-soft);
+    color: var(--danger);
+    box-shadow: none;
+}
+
+.icon-button.danger-ghost::before {
+    content: "X";
+    font-weight: 700;
 }
 
 button:disabled {
@@ -808,6 +834,68 @@ table {
     border-collapse: collapse;
 }
 
+.editable-table {
+    min-width: 1180px;
+    table-layout: fixed;
+}
+
+.editable-table .col-barcode {
+    width: 17%;
+}
+
+.editable-table .col-name {
+    width: 45%;
+}
+
+.editable-table .col-expected,
+.editable-table .col-scanned {
+    width: 9%;
+}
+
+.editable-table .col-status {
+    width: 12%;
+}
+
+.editable-table .col-action,
+.editable-table .col-delete {
+    width: 8%;
+}
+
+.import-review-table .col-name {
+    width: 48%;
+}
+
+.import-review-table .col-expected {
+    width: 10%;
+}
+
+.import-review-table .col-status {
+    width: 15%;
+}
+
+.import-review-table .col-action {
+    width: 7%;
+}
+
+.editable-table td[data-label="Nazwa"] input {
+    min-width: 320px;
+}
+
+.editable-table td[data-label="Oczekiwane"] input,
+.editable-table td[data-label="Zeskanowane"] input {
+    min-width: 86px;
+    text-align: right;
+}
+
+.editable-table td[data-label="Status walidacji"],
+.editable-table th:nth-child(4) {
+    text-align: center;
+}
+
+.editable-table td[data-label="Status walidacji"] .badge {
+    justify-content: center;
+}
+
 th,
 td {
     padding: 14px 16px;
@@ -843,8 +931,23 @@ tbody tr:hover {
 .delete-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    color: var(--ink);
+    justify-content: center;
+    width: 100%;
+    min-height: 38px;
+}
+
+.delete-toggle input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--danger);
+}
+
+tr:has(.delete-toggle input[type="checkbox"]:checked) {
+    background: var(--danger-soft);
+}
+
+tr:has(.delete-toggle input[type="checkbox"]:checked) td {
+    border-bottom-color: rgba(183, 71, 77, 0.18);
 }
 
 .toolbar,
@@ -933,6 +1036,10 @@ code {
         padding: 20px 0 32px;
     }
 
+    .page.workbench-page {
+        width: min(100% - 20px, 100%);
+    }
+
     .panel {
         padding: 18px;
         border-radius: 22px;
@@ -972,6 +1079,7 @@ code {
     }
 
     table,
+    .editable-table,
     thead,
     tbody,
     th,
@@ -1004,6 +1112,22 @@ code {
     td {
         padding: 0;
         border-bottom: 0;
+    }
+
+    .editable-table {
+        min-width: 0;
+        table-layout: auto;
+    }
+
+    .editable-table td[data-label="Nazwa"] input,
+    .editable-table td[data-label="Oczekiwane"] input,
+    .editable-table td[data-label="Zeskanowane"] input {
+        min-width: 0;
+    }
+
+    .delete-toggle {
+        justify-content: flex-start;
+        width: auto;
     }
 
     td::before {

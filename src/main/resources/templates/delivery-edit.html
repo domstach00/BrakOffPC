@@ -15,7 +15,7 @@
     <link rel="stylesheet" th:href="@{/styles.css}">
 </head>
 <body>
-<main class="page narrow">
+<main class="page workbench-page">
     <section class="panel panel-hero review-hero">
         <div class="review-hero-copy">
             <p class="eyebrow" th:text="${pageEyebrow}"></p>
@@ -61,7 +61,15 @@
                 </div>
             </div>
             <div class="table-shell">
-                <table id="delivery-adjustment-table">
+                <table id="delivery-adjustment-table" class="editable-table delivery-adjustment-table">
+                    <colgroup>
+                        <col class="col-barcode">
+                        <col class="col-name">
+                        <col class="col-expected">
+                        <col class="col-scanned">
+                        <col class="col-status">
+                        <col class="col-delete">
+                    </colgroup>
                     <thead>
                     <tr>
                         <th>Barcode</th>
@@ -90,8 +98,7 @@
                         </td>
                         <td data-label="Usuń">
                             <label class="delete-toggle">
-                                <input th:field="*{rows[__${stat.index}__].deleted}" type="checkbox">
-                                <span>Usuń</span>
+                                <input th:field="*{rows[__${stat.index}__].deleted}" type="checkbox" aria-label="Oznacz rekord do usunięcia">
                             </label>
                         </td>
                     </tr>
@@ -168,7 +175,9 @@
                 <span class="badge">Nowy</span>
             </td>
             <td data-label="Usuń">
-                <button type="button" class="ghost" onclick="removeAdjustmentRow(this)">Usuń</button>
+                <label class="delete-toggle">
+                    <input name="rows[${index}].deleted" type="checkbox" aria-label="Oznacz rekord do usunięcia">
+                </label>
             </td>
         `;
         tbody.appendChild(row);

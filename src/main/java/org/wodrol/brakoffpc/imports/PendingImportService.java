@@ -59,12 +59,16 @@ public class PendingImportService {
         return IntStream.range(0, form.getRows().size())
                 .mapToObj(index -> {
                     ImportRowInput row = form.getRows().get(index);
+                    if (row.isDeleted()) {
+                        return null;
+                    }
                     return new ImportDraftItem(
                             index,
                             importValidationService.normalize(row.getBarcode()),
                             importValidationService.normalize(row.getName()),
                             parseInt(row.getExpectedQty()));
                 })
+                .filter(java.util.Objects::nonNull)
                 .filter(item -> item.barcode() != null || item.name() != null || item.expectedQty() != null)
                 .toList();
     }

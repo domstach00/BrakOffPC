@@ -15,7 +15,7 @@
     <link rel="stylesheet" th:href="@{/styles.css}">
 </head>
 <body>
-<main class="page narrow">
+<main class="page workbench-page">
     <section class="panel panel-hero review-hero">
         <div class="review-hero-copy">
             <p class="eyebrow">Weryfikacja importu PDF</p>
@@ -59,23 +59,34 @@
                 </div>
             </div>
             <div class="table-shell">
-            <table id="rows-table">
+            <table id="rows-table" class="editable-table import-review-table">
+                <colgroup>
+                    <col class="col-barcode">
+                    <col class="col-name">
+                    <col class="col-expected">
+                    <col class="col-status">
+                    <col class="col-action">
+                </colgroup>
                 <thead>
                 <tr>
                     <th>Barcode</th>
                     <th>Nazwa</th>
-                    <th>Oczekiwana liczba sztuk</th>
+                    <th>Oczekiwane</th>
                     <th>Status walidacji</th>
-                    <th>Akcja</th>
+                    <th>Usuń</th>
                 </tr>
                 </thead>
                 <tbody>
                 <tr th:each="row, stat : ${rows}">
                     <td data-label="Barcode"><input th:field="*{rows[__${stat.index}__].barcode}" required></td>
                     <td data-label="Nazwa"><input th:field="*{rows[__${stat.index}__].name}" required></td>
-                    <td data-label="ExpectedQty"><input th:field="*{rows[__${stat.index}__].expectedQty}" type="number" min="0" required></td>
+                    <td data-label="Oczekiwane"><input th:field="*{rows[__${stat.index}__].expectedQty}" type="number" min="0" required></td>
                     <td data-label="Status walidacji"><span class="badge validation-status" th:text="${row.status().label()}"></span></td>
-                    <td data-label="Akcja"><button type="button" class="ghost" onclick="removeRow(this)">Usun</button></td>
+                    <td data-label="Usuń">
+                        <label class="delete-toggle">
+                            <input th:field="*{rows[__${stat.index}__].deleted}" type="checkbox" aria-label="Oznacz rekord do usunięcia">
+                        </label>
+                    </td>
                 </tr>
                 </tbody>
             </table>
@@ -104,20 +115,18 @@
         const index = tbody.children.length;
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><input name="rows[${index}].barcode" required></td>
-            <td><input name="rows[${index}].name" required></td>
-            <td><input name="rows[${index}].expectedQty" type="number" min="0" required></td>
-            <td><span class="badge validation-status">Nowy wiersz</span></td>
-            <td><button type="button" class="ghost" onclick="removeRow(this)">Usun</button></td>
+            <td data-label="Barcode"><input name="rows[${index}].barcode" required></td>
+            <td data-label="Nazwa"><input name="rows[${index}].name" required></td>
+            <td data-label="Oczekiwane"><input name="rows[${index}].expectedQty" type="number" min="0" required></td>
+            <td data-label="Status walidacji"><span class="badge validation-status">Nowy wiersz</span></td>
+            <td data-label="Usuń">
+                <label class="delete-toggle">
+                    <input name="rows[${index}].deleted" type="checkbox" aria-label="Oznacz rekord do usunięcia">
+                </label>
+            </td>
         `;
         tbody.appendChild(row);
         attachValidationListeners(row);
-        validateRows();
-    }
-
-    function removeRow(button) {
-        button.closest('tr').remove();
-        reindexRows();
         validateRows();
     }
 
@@ -134,6 +143,9 @@
                 if (input.name.endsWith('.expectedQty')) {
                     input.name = `rows[${index}].expectedQty`;
                 }
+                if (input.name.endsWith('.deleted')) {
+                    input.name = `rows[${index}].deleted`;
+                }
             });
         });
     }
@@ -148,8 +160,9 @@
     function validateRows() {
         const rows = Array.from(document.querySelectorAll('#rows-table tbody tr'));
         const barcodeCounts = new Map();
+        const activeRows = rows.filter(row => !isDeleted(row));
 
-        rows.forEach(row => {
+        activeRows.forEach(row => {
             const barcode = getField(row, '.barcode');
             if (/^\d+$/.test(barcode)) {
                 barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
@@ -158,12 +171,20 @@
 
         let hasCriticalErrors = false;
         let totalQty = 0;
+        let activeRowCount = 0;
         rows.forEach(row => {
+            const deleted = isDeleted(row);
             const barcode = getField(row, '.barcode');
             const name = getField(row, '.name');
             const qtyValue = getField(row, '.expectedQty');
-            let status = 'OK';
+            let status = deleted ? 'Do usunięcia' : 'OK';
 
+            if (deleted) {
+                row.querySelector('.validation-status').textContent = status;
+                return;
+            }
+
+            activeRowCount += 1;
             if (!barcode) {
                 status = 'Brak barcode';
             } else if (!/^\d+$/.test(barcode)) {
@@ -182,16 +203,16 @@
                 hasCriticalErrors = true;
             }
 
-             if (/^\d+$/.test(qtyValue)) {
+            if (/^\d+$/.test(qtyValue)) {
                 totalQty += Number(qtyValue);
             }
 
             row.querySelector('.validation-status').textContent = status;
         });
 
-        confirmButton.disabled = rows.length === 0 || hasCriticalErrors;
+        confirmButton.disabled = activeRowCount === 0 || hasCriticalErrors;
         if (summaryRowCount) {
-            summaryRowCount.textContent = String(rows.length);
+            summaryRowCount.textContent = String(activeRowCount);
         }
         if (summaryTotalQty) {
             summaryTotalQty.textContent = String(totalQty);
@@ -206,6 +227,11 @@
     function getField(row, suffix) {
         const field = Array.from(row.querySelectorAll('input')).find(input => input.name.endsWith(suffix));
         return field ? field.value.trim() : '';
+    }
+
+    function isDeleted(row) {
+        const field = Array.from(row.querySelectorAll('input')).find(input => input.name.endsWith('.deleted'));
+        return field ? field.checked : false;
     }
 
     attachValidationListeners();
