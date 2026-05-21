@@ -6,6 +6,11 @@ server:
   address: 127.0.0.1
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 30d
+      cookie:
+        max-age: 30d
 
 app:
   public-url: https://brakoff.mpdwodrol.com
