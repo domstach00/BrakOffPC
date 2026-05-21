@@ -1,9 +1,9 @@
 package org.wodrol.brakoffpc.web;
 
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -45,28 +45,30 @@ public class HomeController {
     private static final Logger log = LoggerFactory.getLogger(HomeController.class);
     private final PendingImportService pendingImportService;
     private final DeliveryService deliveryService;
-    private final NetworkInfoService networkInfoService;
     private final AppStartupSettingsService appStartupSettingsService;
     private final WindowsAutoStartService windowsAutoStartService;
+    private final String publicUrl;
+    private final boolean desktopSettingsEnabled;
 
     public HomeController(
             PendingImportService pendingImportService,
             DeliveryService deliveryService,
-            NetworkInfoService networkInfoService,
             AppStartupSettingsService appStartupSettingsService,
-            WindowsAutoStartService windowsAutoStartService
+            WindowsAutoStartService windowsAutoStartService,
+            @Value("${app.public-url:https://brakoff.mpdwodrol.com}") String publicUrl,
+            @Value("${app.desktop-settings.enabled:true}") boolean desktopSettingsEnabled
     ) {
         this.pendingImportService = pendingImportService;
         this.deliveryService = deliveryService;
-        this.networkInfoService = networkInfoService;
         this.appStartupSettingsService = appStartupSettingsService;
         this.windowsAutoStartService = windowsAutoStartService;
+        this.publicUrl = normalizePublicUrl(publicUrl);
+        this.desktopSettingsEnabled = desktopSettingsEnabled;
     }
 
     @GetMapping("/")
     public String home(
             Model model,
-            HttpServletRequest request,
             @ModelAttribute("message") String message,
             @ModelAttribute("error") String error
     ) {
@@ -74,10 +76,7 @@ public class HomeController {
         model.addAttribute("activeDelivery", deliveryService.getActiveDelivery().orElse(null));
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRows());
-        model.addAttribute("serverPort", request.getServerPort());
-        model.addAttribute("localEndpoints", networkInfoService.detectLocalIpv4Addresses().stream()
-                .map(address -> "http://" + address + ":" + request.getServerPort())
-                .toList());
+        model.addAttribute("publicServerUrl", publicUrl);
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateStartupSettings(model);
@@ -91,6 +90,11 @@ public class HomeController {
             @RequestParam(name = "autoStartWithWindows", defaultValue = "false") boolean autoStartWithWindows,
             RedirectAttributes redirectAttributes
     ) {
+        if (!desktopSettingsEnabled) {
+            redirectAttributes.addFlashAttribute("error", "Ustawienia uruchamiania są dostępne tylko w wersji desktopowej.");
+            return "redirect:/";
+        }
+
         try {
             windowsAutoStartService.setEnabled(autoStartWithWindows);
             appStartupSettingsService.save(new AppStartupSettings(openBrowserOnStartup));
@@ -539,11 +543,19 @@ public class HomeController {
     }
 
     private void populateStartupSettings(Model model) {
+        model.addAttribute("desktopSettingsVisible", desktopSettingsEnabled);
         AppStartupSettings startupSettings = appStartupSettingsService.load();
         model.addAttribute("openBrowserOnStartup", startupSettings.openBrowserOnStartup());
         model.addAttribute("windowsAutoStartEnabled", windowsAutoStartService.isEnabled());
         model.addAttribute("windowsAutoStartAvailable", windowsAutoStartService.isConfigurable());
         model.addAttribute("windowsAutoStartHint", windowsAutoStartService.availabilityHint());
+    }
+
+    private String normalizePublicUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return "https://brakoff.mpdwodrol.com";
+        }
+        return value.trim().replaceAll("/+$", "");
     }
 
     private String formatDashboardDifferenceLabel(int diffTotal) {

@@ -1,0 +1,15 @@
+spring:
+  thymeleaf:
+    cache: true
+
+server:
+  address: 127.0.0.1
+  port: 8080
+  forward-headers-strategy: framework
+
+app:
+  public-url: https://brakoff.mpdwodrol.com
+  desktop-settings:
+    enabled: false
+  sqlite:
+    path: /var/lib/brakoffpc/brakoffpc.db

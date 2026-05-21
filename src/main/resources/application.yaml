@@ -12,16 +12,24 @@ spring:
       mode: always
   thymeleaf:
     cache: false
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
 
 server:
   address: 0.0.0.0
   port: 8080
+  forward-headers-strategy: framework
 
 logging:
   level:
     org.wodrol.brakoffpc: INFO
 
 app:
+  public-url: https://brakoff.mpdwodrol.com
+  desktop-settings:
+    enabled: true
   sqlite:
     path: ""
   ocr:
