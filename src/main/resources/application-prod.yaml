@@ -11,5 +11,11 @@ app:
   public-url: https://brakoff.mpdwodrol.com
   desktop-settings:
     enabled: false
+  security:
+    operator:
+      username: ${BRAKOFF_OPERATOR_USERNAME}
+      password: ${BRAKOFF_OPERATOR_PASSWORD}
+    mobile:
+      token: ${BRAKOFF_MOBILE_API_TOKEN}
   sqlite:
     path: /var/lib/brakoffpc/brakoffpc.db

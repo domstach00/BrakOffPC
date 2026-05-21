@@ -30,6 +30,12 @@ app:
   public-url: https://brakoff.mpdwodrol.com
   desktop-settings:
     enabled: true
+  security:
+    operator:
+      username: admin
+      password: admin
+    mobile:
+      token: dev-mobile-token
   sqlite:
     path: ""
   ocr:

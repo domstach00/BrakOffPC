@@ -49,6 +49,7 @@ public class HomeController {
     private final WindowsAutoStartService windowsAutoStartService;
     private final String publicUrl;
     private final boolean desktopSettingsEnabled;
+    private final String mobileApiToken;
 
     public HomeController(
             PendingImportService pendingImportService,
@@ -56,7 +57,8 @@ public class HomeController {
             AppStartupSettingsService appStartupSettingsService,
             WindowsAutoStartService windowsAutoStartService,
             @Value("${app.public-url:https://brakoff.mpdwodrol.com}") String publicUrl,
-            @Value("${app.desktop-settings.enabled:true}") boolean desktopSettingsEnabled
+            @Value("${app.desktop-settings.enabled:true}") boolean desktopSettingsEnabled,
+            @Value("${app.security.mobile.token}") String mobileApiToken
     ) {
         this.pendingImportService = pendingImportService;
         this.deliveryService = deliveryService;
@@ -64,6 +66,7 @@ public class HomeController {
         this.windowsAutoStartService = windowsAutoStartService;
         this.publicUrl = normalizePublicUrl(publicUrl);
         this.desktopSettingsEnabled = desktopSettingsEnabled;
+        this.mobileApiToken = mobileApiToken == null ? "" : mobileApiToken.trim();
     }
 
     @GetMapping("/")
@@ -77,6 +80,7 @@ public class HomeController {
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRows());
         model.addAttribute("publicServerUrl", publicUrl);
+        model.addAttribute("mobileApiToken", mobileApiToken);
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateStartupSettings(model);
