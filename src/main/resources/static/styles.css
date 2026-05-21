@@ -605,7 +605,7 @@ button:disabled {
 }
 
 .api-item {
-    padding: 14px 16px;
+    padding: 16px 18px;
     border: 1px solid rgba(16, 32, 51, 0.08);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.72);
@@ -620,6 +620,60 @@ button:disabled {
 .api-item code {
     display: block;
     overflow-wrap: anywhere;
+}
+
+.api-value-label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.api-value {
+    display: block;
+    padding: 10px 12px;
+    border: 1px solid rgba(26, 53, 97, 0.14);
+    border-radius: 12px;
+    background: rgba(16, 32, 51, 0.055);
+    color: var(--accent-strong);
+    font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+    font-size: clamp(0.9rem, 1.15vw, 1rem);
+    font-weight: 650;
+    line-height: 1.5;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.api-token-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: clamp(0.88rem, 1vw, 0.96rem);
+}
+
+.secret-value-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.secret-toggle-button {
+    flex: 0 0 auto;
+    min-width: 82px;
+    padding: 0 14px;
+    border: 1px solid rgba(26, 53, 97, 0.14);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.76);
+    color: var(--accent);
+    box-shadow: none;
+    font-size: 0.9rem;
+}
+
+.secret-toggle-button:hover {
+    box-shadow: var(--shadow-soft);
 }
 
 .api-more {
@@ -1067,6 +1121,14 @@ code {
 
     .setting-option {
         grid-template-columns: 20px minmax(0, 1fr);
+    }
+
+    .secret-value-row {
+        display: grid;
+    }
+
+    .secret-toggle-button {
+        min-height: 40px;
     }
 
     .review-summary {

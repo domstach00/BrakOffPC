@@ -184,17 +184,21 @@
                 <p class="section-kicker">Połączenie</p>
                 <h2>Adres serwera</h2>
             </div>
-            <span class="count-badge">HTTPS</span>
         </div>
         <div class="network-panel-body">
             <div>
                 <div class="api-list">
                     <div class="api-item">
-                        <code th:text="${publicServerUrl}">https://brakoff.mpdwodrol.com</code>
+                        <span class="api-value-label">Adres serwera</span>
+                        <code class="api-value" th:text="${publicServerUrl}">https://brakoff.mpdwodrol.com</code>
                         <p>W aplikacji BrakOff wejdź w ustawienia i w polu adresu serwera wpisz powyższy link, zapisz i przetestuj połączenie.</p>
                     </div>
                     <div class="api-item">
-                        <code th:text="${mobileApiToken}">token</code>
+                        <span class="api-value-label">Token API</span>
+                        <div class="secret-value-row">
+                            <code class="api-value api-token-value" id="mobile-api-token" data-hidden="true" th:attr="data-token=${mobileApiToken}">••••••••••••••••••••••••</code>
+                            <button type="button" class="secret-toggle-button" id="mobile-api-token-toggle" aria-controls="mobile-api-token" aria-pressed="false">Odkryj</button>
+                        </div>
                         <p>W polu tokenu API wpisz powyższą wartość. Token jest wymagany do pobierania dostawy i wysyłania skanów z telefonu.</p>
                     </div>
                 </div>
@@ -447,6 +451,30 @@
 
     window.setTimeout(refreshDashboard, 1500);
     window.setInterval(refreshDashboard, dashboardPollIntervalMs);
+
+    const mobileApiToken = document.getElementById('mobile-api-token');
+    const mobileApiTokenToggle = document.getElementById('mobile-api-token-toggle');
+    const maskedTokenText = '••••••••••••••••••••••••';
+
+    mobileApiTokenToggle?.addEventListener('click', () => {
+        if (!mobileApiToken) {
+            return;
+        }
+
+        const hidden = mobileApiToken.dataset.hidden !== 'false';
+        if (hidden) {
+            mobileApiToken.textContent = mobileApiToken.dataset.token ?? '';
+            mobileApiToken.dataset.hidden = 'false';
+            mobileApiTokenToggle.textContent = 'Ukryj';
+            mobileApiTokenToggle.setAttribute('aria-pressed', 'true');
+            return;
+        }
+
+        mobileApiToken.textContent = maskedTokenText;
+        mobileApiToken.dataset.hidden = 'true';
+        mobileApiTokenToggle.textContent = 'Odkryj';
+        mobileApiTokenToggle.setAttribute('aria-pressed', 'false');
+    });
 </script>
 </body>
 </html>
