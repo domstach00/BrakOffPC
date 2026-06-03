@@ -3,6 +3,8 @@ package org.wodrol.brakoffpc.imports;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
@@ -18,7 +20,31 @@ import java.util.List;
 
 final class TestPdfFactory {
 
+    private static final PDType1Font TEST_FONT = new PDType1Font(Standard14Fonts.FontName.COURIER);
+
     private TestPdfFactory() {
+    }
+
+    static byte[] createTextPdf(List<String> lines) throws IOException {
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            document.addPage(page);
+
+            try (var contentStream = new org.apache.pdfbox.pdmodel.PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(TEST_FONT, 9);
+                contentStream.newLineAtOffset(36, page.getMediaBox().getHeight() - 36);
+                for (String line : lines) {
+                    contentStream.showText(line);
+                    contentStream.newLineAtOffset(0, -12);
+                }
+                contentStream.endText();
+            }
+
+            document.save(outputStream);
+            return outputStream.toByteArray();
+        }
     }
 
     static byte[] createImageOnlyPdf(List<String> lines) throws IOException {

@@ -5,8 +5,10 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PdfImportServiceTest {
 
@@ -45,6 +47,20 @@ class PdfImportServiceTest {
             16 5906900313507 KUBKI DO NAPOJOW ZIMNYCH RAINBOW 200ML , 6SZT 3,00 PLN 10 szt
             * 17 5906900003064 TACKI PAPIEROWE 13,5X20,5CM 12SZT 3,00PLN 25 szt
             Podsumowanie ilosci: 340 szt
+            """;
+
+    private static final String GRAMAR_OCR_TEXT = """
+            N ey J P.z00.5P  Przyjecie magazynowe PZ/05/2026/000153
+            Lp. Kod towaru Nazwa towaru Cena Detaliczna Ilosc jm.
+            1 5901448340046 PCHACZ MOTYL 19,00 PLN 1 szt
+            2 5901448340244 PCHACZ KACZOR Z DZWONKIEM 19,90 PLN 1 szt
+            43 5907803717102 TOREBKA OZDOBNA PAW T-2L 10-SZT 22.5 X 31.5 X 11 CM 7,00 PLN 10 szt
+            WODROL Przyjecie magazynowe PZ/05/2026/000153 strona: 2
+            Lp. Kod towaru Nazwa towaru Cena Detaliczna Ilosc jm.
+            46 5904073168481 DELFIN ZLOTE KROPKI 28 CM 20,00 PLN 4 szt
+            84 5902414008908 MODELINA INSPIRIA 6 KOLOROW 17,00 PLN 1 kpl
+            Suma:
+            Podsumowanie ilosci: 467 szt, 7 kpl
             """;
 
     private final PdfImportService pdfImportService = new PdfImportService(document -> "");
@@ -90,10 +106,27 @@ class PdfImportServiceTest {
 
         assertEquals(17, items.size());
         assertEquals("5906900702639", items.getFirst().barcode());
-        assertEquals("KUBKI DO PIWA 500ML wielokrotnego uzytku 6szt 4,00 PLN", items.getFirst().name());
+        assertEquals("KUBKI DO PIWA 500ML wielokrotnego uzytku 6szt", items.getFirst().name());
         assertEquals(10, items.getFirst().expectedQty());
         assertEquals("5906900003064", items.getLast().barcode());
+        assertEquals("TACKI PAPIEROWE 13,5X20,5CM 12SZT", items.getLast().name());
         assertEquals(25, items.getLast().expectedQty());
+    }
+
+    @Test
+    void parsesRowsFromMicrosoftPrintToPdfOcrLayout() {
+        List<ImportDraftItem> items = pdfImportService.parseLines(GRAMAR_OCR_TEXT);
+
+        assertEquals(5, items.size());
+        assertEquals("5901448340046", items.getFirst().barcode());
+        assertEquals("PCHACZ MOTYL", items.getFirst().name());
+        assertEquals(1, items.getFirst().expectedQty());
+        assertEquals("5907803717102", items.get(2).barcode());
+        assertEquals("TOREBKA OZDOBNA PAW T-2L 10-SZT 22.5 X 31.5 X 11 CM", items.get(2).name());
+        assertEquals(10, items.get(2).expectedQty());
+        assertEquals("5902414008908", items.getLast().barcode());
+        assertEquals("MODELINA INSPIRIA 6 KOLOROW", items.getLast().name());
+        assertEquals(1, items.getLast().expectedQty());
     }
 
     @Test
@@ -110,6 +143,31 @@ class PdfImportServiceTest {
         assertEquals(2, items.size());
         assertEquals("NJB SLOMKI PAPIEROWE 12SZT DOTS", items.get(0).name());
         assertEquals("NJB WIDELCE DREWNIANE 6SZT", items.get(1).name());
+    }
+
+    @Test
+    void fallsBackToOcrWhenTextLayerLooksCorruptedEvenIfItParsesRows() throws IOException {
+        AtomicBoolean ocrCalled = new AtomicBoolean(false);
+        PdfImportService service = new PdfImportService(document -> {
+            ocrCalled.set(true);
+            return GRAMAR_OCR_TEXT;
+        });
+        MockMultipartFile file = new MockMultipartFile(
+                "pdfFile",
+                "print-to-pdf.pdf",
+                "application/pdf",
+                TestPdfFactory.createTextPdf(List.of(
+                        "1234567890123 111111111111111111111111111111111111111111111111111111111111111111111 2",
+                        "1234567890124 222222222222222222222222222222222222222222222222222222222222222222222 4"
+                ))
+        );
+
+        List<ImportDraftItem> items = service.extractItems(file);
+
+        assertTrue(ocrCalled.get());
+        assertEquals(5, items.size());
+        assertEquals("5901448340046", items.getFirst().barcode());
+        assertEquals("PCHACZ MOTYL", items.getFirst().name());
     }
 
     @Test
