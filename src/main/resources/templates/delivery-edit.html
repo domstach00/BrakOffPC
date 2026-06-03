@@ -66,6 +66,7 @@
                         <col class="col-barcode">
                         <col class="col-name">
                         <col class="col-expected">
+                        <col class="col-unit">
                         <col class="col-scanned">
                         <col class="col-status">
                         <col class="col-delete">
@@ -75,6 +76,7 @@
                         <th>Barcode</th>
                         <th>Nazwa</th>
                         <th>Oczekiwane</th>
+                        <th>JM</th>
                         <th>Zeskanowane</th>
                         <th>Status</th>
                         <th>Usuń</th>
@@ -92,7 +94,10 @@
                         <td data-label="Oczekiwane">
                             <input th:field="*{rows[__${stat.index}__].expectedQty}" type="number" min="0" required>
                         </td>
-                        <td data-label="Zeskanowane" th:text="${row.scannedQty()}"></td>
+                        <td data-label="JM">
+                            <input th:field="*{rows[__${stat.index}__].unit}" required>
+                        </td>
+                        <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
                         <td data-label="Status">
                             <span class="badge" th:text="${row.status()}"></span>
                         </td>
@@ -144,6 +149,9 @@
                 if (input.name.endsWith('.expectedQty')) {
                     input.name = `rows[${index}].expectedQty`;
                 }
+                if (input.name.endsWith('.unit')) {
+                    input.name = `rows[${index}].unit`;
+                }
                 if (input.name.endsWith('.deleted')) {
                     input.name = `rows[${index}].deleted`;
                 }
@@ -170,7 +178,10 @@
             <td data-label="Oczekiwane">
                 <input name="rows[${index}].expectedQty" type="number" min="0" required>
             </td>
-            <td data-label="Zeskanowane">0</td>
+            <td data-label="JM">
+                <input name="rows[${index}].unit" value="szt" required>
+            </td>
+            <td data-label="Zeskanowane">0 szt</td>
             <td data-label="Status">
                 <span class="badge">Nowy</span>
             </td>

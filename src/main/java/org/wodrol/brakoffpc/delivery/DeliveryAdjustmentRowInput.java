@@ -6,6 +6,7 @@ public class DeliveryAdjustmentRowInput {
     private String barcode;
     private String name;
     private String expectedQty;
+    private String unit;
     private boolean deleted;
 
     public String getOriginalBarcode() {
@@ -38,6 +39,14 @@ public class DeliveryAdjustmentRowInput {
 
     public void setExpectedQty(String expectedQty) {
         this.expectedQty = expectedQty;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 
     public boolean isDeleted() {

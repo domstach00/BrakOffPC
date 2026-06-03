@@ -5,6 +5,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.wodrol.brakoffpc.common.MeasurementUnit;
 
 import java.io.IOException;
 import java.text.Normalizer;
@@ -19,8 +20,9 @@ import java.util.regex.Pattern;
 public class PdfImportService {
 
     private static final int MIN_BARCODE_LENGTH = 8;
-    private static final Pattern STRICT_LINE_PATTERN = Pattern.compile("^(?:\\d+\\s+)?(?<barcode>\\d{" + MIN_BARCODE_LENGTH + ",14})\\s+(?<name>.+?)\\s+(?<qty>\\d+)\\s*$");
+    private static final Pattern STRICT_LINE_PATTERN = Pattern.compile("^(?:\\d+\\s+)?(?<barcode>\\d{" + MIN_BARCODE_LENGTH + ",14})\\s+(?<name>.+?)\\s+(?<qty>\\d+)(?:\\s+(?<unit>(?=[\\p{L}\\p{N}./-]*\\p{L})[\\p{L}\\p{N}./-]+))?\\s*$");
     private static final Pattern TRAILING_PRICE_PATTERN = Pattern.compile("(?iu)(?:[-|\\u2013\\u2014]+\\s*)?\\d+(?:[,.]\\d{1,2})?\\s*(?:pln|zl|z\\u0142)\\.?\\s*[-|\\u2013\\u2014]*\\s*$");
+    private static final Pattern TRAILING_PRICE_COLUMN_PATTERN = Pattern.compile("(?iu)(?:\\s+[-|\\u2013\\u2014]*\\s*)?(?:\\d+(?:[,.]\\d{1,2})\\s*(?:pln|zl|z\\u0142)\\.?|\\d+\\s*(?:pln|zl|z\\u0142)\\.?|\\d+[,.]\\d{1,2})\\s*[-|\\u2013\\u2014]*\\s*$");
     private static final Pattern TRAILING_OCR_SEPARATOR_PATTERN = Pattern.compile("[\\s\\-_|\\u2013\\u2014]+$");
     private static final List<String> HEADER_MARKERS = List.of("barcode", "kod", "ean", "nazwa", "ilosc", "qty", "quantity");
     private static final List<String> FOOTER_MARKERS = List.of("razem", "suma", "wartosc", "podsumowanie", "signature", "podpis");
@@ -74,7 +76,7 @@ public class PdfImportService {
             }
             ParsedLine parsedLine = parseCandidateLine(line);
             if (parsedLine != null) {
-                items.add(new ImportDraftItem(rowOrder++, parsedLine.barcode(), parsedLine.name(), parsedLine.expectedQty()));
+                items.add(new ImportDraftItem(rowOrder++, parsedLine.barcode(), parsedLine.name(), parsedLine.expectedQty(), parsedLine.unit()));
             }
         }
         return items;
@@ -110,7 +112,8 @@ public class PdfImportService {
     }
 
     private ParsedLine parseCandidateLine(String line) {
-        Matcher strictMatcher = STRICT_LINE_PATTERN.matcher(line);
+        String lineWithoutTrailingPriceColumns = stripTrailingPriceColumns(line);
+        Matcher strictMatcher = STRICT_LINE_PATTERN.matcher(lineWithoutTrailingPriceColumns);
         if (strictMatcher.matches()) {
             String normalizedName = normalizeItemName(stripTrailingPrice(strictMatcher.group("name")));
             if (normalizedName == null) {
@@ -119,11 +122,12 @@ public class PdfImportService {
             return new ParsedLine(
                     normalizeBarcodeToken(strictMatcher.group("barcode")),
                     normalizedName,
-                    Integer.parseInt(strictMatcher.group("qty"))
+                    Integer.parseInt(strictMatcher.group("qty")),
+                    MeasurementUnit.normalize(strictMatcher.group("unit"))
             );
         }
 
-        String[] tokens = line.split(" ");
+        String[] tokens = lineWithoutTrailingPriceColumns.split(" ");
         if (tokens.length < 3) {
             return null;
         }
@@ -149,7 +153,7 @@ public class PdfImportService {
             return null;
         }
 
-        return new ParsedLine(barcode, name, Integer.parseInt(quantity));
+        return new ParsedLine(barcode, name, Integer.parseInt(quantity), extractUnit(tokens, qtyIndex));
     }
 
     private int findLastQuantityIndex(String[] tokens) {
@@ -187,6 +191,25 @@ public class PdfImportService {
         return digits.isBlank() ? null : digits;
     }
 
+    private String extractUnit(String[] tokens, int qtyIndex) {
+        String attachedUnit = extractLettersAndDigits(tokens[qtyIndex]).replaceFirst("^\\d+", "");
+        if (!attachedUnit.isBlank() && attachedUnit.chars().anyMatch(Character::isLetter)) {
+            return MeasurementUnit.normalize(attachedUnit);
+        }
+
+        for (int index = qtyIndex + 1; index < tokens.length; index++) {
+            String unit = extractLettersAndDigits(tokens[index]);
+            if (!unit.isBlank() && unit.chars().anyMatch(Character::isLetter)) {
+                return MeasurementUnit.normalize(unit);
+            }
+        }
+        return MeasurementUnit.DEFAULT_UNIT;
+    }
+
+    private String extractLettersAndDigits(String token) {
+        return token == null ? "" : token.replaceAll("[^\\p{L}\\p{N}./-]", "");
+    }
+
     private String normalizeItemName(String rawName) {
         if (rawName == null) {
             return null;
@@ -218,6 +241,17 @@ public class PdfImportService {
         String normalized = TRAILING_PRICE_PATTERN.matcher(rawName.trim()).replaceFirst("");
         normalized = TRAILING_OCR_SEPARATOR_PATTERN.matcher(normalized).replaceFirst("");
         return normalized.trim();
+    }
+
+    private String stripTrailingPriceColumns(String line) {
+        String normalized = line == null ? "" : line.trim();
+        while (true) {
+            String stripped = TRAILING_PRICE_COLUMN_PATTERN.matcher(normalized).replaceFirst("").trim();
+            if (stripped.equals(normalized)) {
+                return normalized;
+            }
+            normalized = TRAILING_OCR_SEPARATOR_PATTERN.matcher(stripped).replaceFirst("").trim();
+        }
     }
 
     private boolean isDocumentMetadataLine(String line) {
@@ -303,6 +337,6 @@ public class PdfImportService {
         return decomposed.replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT).trim();
     }
 
-    private record ParsedLine(String barcode, String name, Integer expectedQty) {
+    private record ParsedLine(String barcode, String name, Integer expectedQty, String unit) {
     }
 }

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.wodrol.brakoffpc.common.MeasurementUnit;
 import org.wodrol.brakoffpc.imports.ImportDraft;
 import org.wodrol.brakoffpc.imports.ImportDraftItem;
 import org.wodrol.brakoffpc.web.PolishDateTimeFormatter;
@@ -54,7 +55,7 @@ public class DeliveryService {
                 Instant.now(),
                 Instant.now(),
                 items.stream()
-                        .map(item -> new DeliveryItem(deliveryId, item.barcode(), item.name(), item.expectedQty()))
+                        .map(item -> new DeliveryItem(deliveryId, item.barcode(), item.name(), item.expectedQty(), item.unit()))
                         .toList()
         );
         deliveryRepository.save(delivery);
@@ -81,6 +82,7 @@ public class DeliveryService {
                                     item.barcode(),
                                     item.name(),
                                     item.expectedQty(),
+                                    item.unit(),
                                     scannedQtyByBarcode.getOrDefault(item.barcode(), 0)))
                             .toList()
             );
@@ -144,6 +146,7 @@ public class DeliveryService {
                     item.expectedQty(),
                     0,
                     item.expectedQty(),
+                    item.unit(),
                     false
             ));
         }
@@ -158,6 +161,7 @@ public class DeliveryService {
                         existing.expectedQty(),
                         scanned,
                         existing.expectedQty() - scanned,
+                        existing.unit(),
                         false
                 ));
             } else {
@@ -167,6 +171,7 @@ public class DeliveryService {
                         0,
                         scan.quantity(),
                         -scan.quantity(),
+                        MeasurementUnit.DEFAULT_UNIT,
                         true
                 ));
             }
@@ -179,8 +184,10 @@ public class DeliveryService {
 
     private List<DeviceSummaryRow> buildDeviceRows(DeliveryRecord delivery) {
         Map<String, String> names = new LinkedHashMap<>();
+        Map<String, String> units = new LinkedHashMap<>();
         for (DeliveryItem item : delivery.items()) {
             names.put(item.barcode(), item.name());
+            units.put(item.barcode(), item.unit());
         }
 
         List<DeviceScanState> scans = deliveryRepository.findScans(delivery.id());
@@ -193,6 +200,7 @@ public class DeliveryService {
                         scan.barcode(),
                         names.getOrDefault(scan.barcode(), fallbackItemName(scan)),
                         scan.quantity(),
+                        units.getOrDefault(scan.barcode(), MeasurementUnit.DEFAULT_UNIT),
                         scan.revision(),
                         PolishDateTimeFormatter.format(scan.updatedAt())))
                 .toList();
@@ -243,7 +251,7 @@ public class DeliveryService {
                 .filter(row -> !row.deleted())
                 .toList();
         List<DeliveryItem> items = finalRows.stream()
-                .map(row -> new DeliveryItem(deliveryId, row.barcode(), row.name(), row.expectedQty()))
+                .map(row -> new DeliveryItem(deliveryId, row.barcode(), row.name(), row.expectedQty(), row.unit()))
                 .toList();
         List<DeviceScanState> migratedScans = rebuildScans(finalRows, scansByBarcode);
 
@@ -303,6 +311,7 @@ public class DeliveryService {
                             scan.deviceName(),
                             scan.barcode(),
                             deliveryItem != null ? deliveryItem.name() : fallbackItemName(scan),
+                            deliveryItem != null ? deliveryItem.unit() : MeasurementUnit.DEFAULT_UNIT,
                             scan.quantity(),
                             deliveryItem != null,
                             formatForMobile(scan.updatedAt()),
@@ -443,9 +452,9 @@ public class DeliveryService {
         for (DashboardRow row : rows) {
             table.addCell(new Phrase(row.barcode()));
             table.addCell(new Phrase(row.name()));
-            table.addCell(new Phrase(String.valueOf(row.expectedQty())));
-            table.addCell(new Phrase(String.valueOf(row.scannedQty())));
-            table.addCell(new Phrase(String.valueOf(row.difference())));
+            table.addCell(new Phrase(MeasurementUnit.format(row.expectedQty(), row.unit())));
+            table.addCell(new Phrase(MeasurementUnit.format(row.scannedQty(), row.unit())));
+            table.addCell(new Phrase(MeasurementUnit.format(row.difference(), row.unit())));
         }
         document.add(table);
     }
@@ -539,7 +548,7 @@ public class DeliveryService {
         String originalBarcode = normalizeText(row.originalBarcode());
         String barcode = normalizeText(row.barcode());
         String name = normalizeText(row.name());
-        return new DeliveryAdjustmentRow(originalBarcode, barcode, name, row.expectedQty(), row.deleted());
+        return new DeliveryAdjustmentRow(originalBarcode, barcode, name, row.expectedQty(), row.unit(), row.deleted());
     }
 
     private boolean shouldKeepAdjustmentRow(DeliveryAdjustmentRow row) {
@@ -573,6 +582,9 @@ public class DeliveryService {
             }
             if (row.expectedQty() < 0) {
                 throw new IllegalArgumentException("Oczekiwana ilość nie może być ujemna.");
+            }
+            if (row.unit() == null || row.unit().isBlank()) {
+                throw new IllegalArgumentException("Jednostka miary nie może być pusta.");
             }
             if (!seenBarcodes.add(row.barcode())) {
                 throw new IllegalArgumentException("Wykryto duplikat barcode w korekcie dostawy.");

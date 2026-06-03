@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.wodrol.brakoffpc.common.MeasurementUnit;
 
 import java.time.Instant;
 import java.util.List;
@@ -66,7 +67,8 @@ public class PendingImportService {
                             index,
                             importValidationService.normalize(row.getBarcode()),
                             importValidationService.normalize(row.getName()),
-                            parseInt(row.getExpectedQty()));
+                            parseInt(row.getExpectedQty()),
+                            MeasurementUnit.normalize(row.getUnit()));
                 })
                 .filter(java.util.Objects::nonNull)
                 .filter(item -> item.barcode() != null || item.name() != null || item.expectedQty() != null)

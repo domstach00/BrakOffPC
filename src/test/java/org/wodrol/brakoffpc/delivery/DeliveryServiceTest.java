@@ -286,7 +286,7 @@ class DeliveryServiceTest {
                 Instant.now(),
                 Instant.now(),
                 List.of(
-                        new DeliveryItem("delivery-1", "111", "Produkt A", 5),
+                        new DeliveryItem("delivery-1", "111", "Produkt A", 5, "kpl"),
                         new DeliveryItem("delivery-1", "222", "Produkt B", 2)
                 )
         );
@@ -311,7 +311,9 @@ class DeliveryServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals(7, firstItem.scannedQty());
+        assertEquals("kpl", firstItem.unit());
         assertEquals(0, secondItem.scannedQty());
+        assertEquals("szt", secondItem.unit());
     }
 
     @Test

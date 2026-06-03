@@ -104,8 +104,8 @@
                 <a class="button ghost" th:if="${activeDelivery != null}" th:href="@{/deliveries/edit}">Edytuj tabelę</a>
                 <span class="count-badge" id="dashboard-row-count" th:text="${dashboardRowCount + ' pozycji'}"></span>
                 <span class="count-badge" id="dashboard-expected-total" th:text="${'Oczekiwane: ' + dashboardExpectedTotal}"></span>
-                <span class="count-badge" id="dashboard-scanned-total" th:classappend="${dashboardScannedTotal == 0 ? ' hidden' : ''}" th:text="${'Zeskanowane: ' + dashboardScannedTotal}"></span>
-                <span class="count-badge" id="dashboard-difference-total" th:classappend="${dashboardDifferenceTotal == 0 ? ' hidden' : ''}" th:text="${dashboardDifferenceLabel}"></span>
+                <span class="count-badge" id="dashboard-scanned-total" th:classappend="${dashboardScannedTotalZero ? ' hidden' : ''}" th:text="${'Zeskanowane: ' + dashboardScannedTotal}"></span>
+                <span class="count-badge" id="dashboard-difference-total" th:classappend="${dashboardDifferenceTotalZero ? ' hidden' : ''}" th:text="${dashboardDifferenceLabel}"></span>
             </div>
         </div>
         <div class="table-shell" id="dashboard-table-shell" th:classappend="${#lists.isEmpty(dashboardRows) ? ' hidden' : ''}">
@@ -124,9 +124,9 @@
             <tr th:each="row : ${dashboardRows}">
                 <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
                 <td data-label="Nazwa" th:text="${row.name()}"></td>
-                <td data-label="Oczekiwane" th:text="${row.expectedQty()}"></td>
-                <td data-label="Zeskanowane" th:text="${row.scannedQty()}"></td>
-                <td data-label="Różnica" th:text="${row.difference()}"></td>
+                <td data-label="Oczekiwane" th:text="${row.expectedQty() + ' ' + row.unit()}"></td>
+                <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
+                <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
                 <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
             </tr>
             </tbody>
@@ -165,7 +165,7 @@
                 </td>
                 <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
                 <td data-label="Nazwa" th:text="${row.name()}"></td>
-                <td data-label="Ilość" th:text="${row.quantity()}"></td>
+                <td data-label="Ilość" th:text="${row.quantity() + ' ' + row.unit()}"></td>
                 <td data-label="Revision" th:text="${row.revision()}"></td>
                 <td data-label="UpdatedAt" th:text="${row.updatedAt()}"></td>
             </tr>
@@ -341,9 +341,9 @@
             const tr = document.createElement('tr');
             tr.appendChild(createCell('Barcode', row.barcode ?? '', true));
             tr.appendChild(createCell('Nazwa', row.name ?? ''));
-            tr.appendChild(createCell('Oczekiwane', String(row.expectedQty ?? 0)));
-            tr.appendChild(createCell('Zeskanowane', String(row.scannedQty ?? 0)));
-            tr.appendChild(createCell('Różnica', String(row.difference ?? 0)));
+            tr.appendChild(createCell('Oczekiwane', formatQuantity(row.expectedQty ?? 0, row.unit)));
+            tr.appendChild(createCell('Zeskanowane', formatQuantity(row.scannedQty ?? 0, row.unit)));
+            tr.appendChild(createCell('Różnica', formatQuantity(row.difference ?? 0, row.unit)));
             tr.appendChild(createBadgeCell('Status', resolveDashboardStatus(row)));
             dashboardTableBody.appendChild(tr);
         }
@@ -360,41 +360,76 @@
             tr.appendChild(createCell('Urządzenie', row.deviceName ?? row.deviceId ?? '', true, row.deviceId ?? ''));
             tr.appendChild(createCell('Barcode', row.barcode ?? '', true));
             tr.appendChild(createCell('Nazwa', row.name ?? ''));
-            tr.appendChild(createCell('Ilość', String(row.quantity ?? 0)));
+            tr.appendChild(createCell('Ilość', formatQuantity(row.quantity ?? 0, row.unit)));
             tr.appendChild(createCell('Revision', String(row.revision ?? 0)));
             tr.appendChild(createCell('UpdatedAt', row.updatedAt ?? ''));
             deviceTableBody.appendChild(tr);
         }
     }
 
-    function formatDashboardDifferenceLabel(differenceTotal) {
-        if (differenceTotal < 0) {
-            return `Różnica: ${Math.abs(differenceTotal)} (nadmiar)`;
+    function normalizeUnit(unit) {
+        const normalized = String(unit ?? 'szt').trim().toLowerCase().replace(/[.\s,;:]+$/g, '');
+        if (normalized === 'sz' || normalized === 'sztuk' || normalized === 'sztuki' || normalized === '') {
+            return 'szt';
         }
-        if (differenceTotal > 0) {
-            return `Różnica: ${differenceTotal} (brak)`;
+        return normalized;
+    }
+
+    function formatQuantity(quantity, unit) {
+        return `${quantity} ${normalizeUnit(unit)}`;
+    }
+
+    function groupQuantityTotals(rows, valueSelector) {
+        const totals = new Map();
+        for (const row of rows) {
+            const unit = normalizeUnit(row.unit);
+            totals.set(unit, (totals.get(unit) || 0) + (valueSelector(row) ?? 0));
         }
-        return 'Różnica: 0 (zgodność)';
+        return totals;
+    }
+
+    function formatGroupedTotals(totals, {absolute = false} = {}) {
+        const parts = Array.from(totals.entries())
+            .filter(([, quantity]) => quantity !== 0)
+            .map(([unit, quantity]) => `${absolute ? Math.abs(quantity) : quantity} ${unit}`);
+        return parts.length ? parts.join(', ') : '0';
+    }
+
+    function totalsAreZero(totals) {
+        return Array.from(totals.values()).every(quantity => quantity === 0);
+    }
+
+    function formatDashboardDifferenceLabel(differenceTotals) {
+        const missing = new Map(Array.from(differenceTotals.entries()).filter(([, quantity]) => quantity > 0));
+        const excess = new Map(Array.from(differenceTotals.entries()).filter(([, quantity]) => quantity < 0));
+        const parts = [];
+        if (missing.size > 0) {
+            parts.push(`${formatGroupedTotals(missing)} brak`);
+        }
+        if (excess.size > 0) {
+            parts.push(`${formatGroupedTotals(excess, {absolute: true})} nadmiar`);
+        }
+        return parts.length ? `Różnica: ${parts.join(', ')}` : 'Różnica: 0';
     }
 
     function updateDashboardSummary(rows) {
-        const expectedTotal = rows.reduce((sum, row) => sum + (row.expectedQty ?? 0), 0);
-        const scannedTotal = rows.reduce((sum, row) => sum + (row.scannedQty ?? 0), 0);
-        const differenceTotal = rows.reduce((sum, row) => sum + (row.difference ?? 0), 0);
+        const expectedTotals = groupQuantityTotals(rows, row => row.expectedQty);
+        const scannedTotals = groupQuantityTotals(rows, row => row.scannedQty);
+        const differenceTotals = groupQuantityTotals(rows, row => row.difference);
 
         if (dashboardRowCount) {
             dashboardRowCount.textContent = `${rows.length} pozycji`;
         }
         if (dashboardExpectedTotal) {
-            dashboardExpectedTotal.textContent = `Oczekiwane: ${expectedTotal}`;
+            dashboardExpectedTotal.textContent = `Oczekiwane: ${formatGroupedTotals(expectedTotals)}`;
         }
         if (dashboardScannedTotal) {
-            dashboardScannedTotal.textContent = `Zeskanowane: ${scannedTotal}`;
-            setVisible(dashboardScannedTotal, scannedTotal !== 0);
+            dashboardScannedTotal.textContent = `Zeskanowane: ${formatGroupedTotals(scannedTotals)}`;
+            setVisible(dashboardScannedTotal, !totalsAreZero(scannedTotals));
         }
         if (dashboardDifferenceTotal) {
-            dashboardDifferenceTotal.textContent = formatDashboardDifferenceLabel(differenceTotal);
-            setVisible(dashboardDifferenceTotal, differenceTotal !== 0);
+            dashboardDifferenceTotal.textContent = formatDashboardDifferenceLabel(differenceTotals);
+            setVisible(dashboardDifferenceTotal, !totalsAreZero(differenceTotals));
         }
     }
 

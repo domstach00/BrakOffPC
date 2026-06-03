@@ -64,6 +64,7 @@
                     <col class="col-barcode">
                     <col class="col-name">
                     <col class="col-expected">
+                    <col class="col-unit">
                     <col class="col-status">
                     <col class="col-action">
                 </colgroup>
@@ -72,6 +73,7 @@
                     <th>Barcode</th>
                     <th>Nazwa</th>
                     <th>Oczekiwane</th>
+                    <th>JM</th>
                     <th>Status walidacji</th>
                     <th>Usuń</th>
                 </tr>
@@ -81,6 +83,7 @@
                     <td data-label="Barcode"><input th:field="*{rows[__${stat.index}__].barcode}" required></td>
                     <td data-label="Nazwa"><input th:field="*{rows[__${stat.index}__].name}" required></td>
                     <td data-label="Oczekiwane"><input th:field="*{rows[__${stat.index}__].expectedQty}" type="number" min="0" required></td>
+                    <td data-label="JM"><input th:field="*{rows[__${stat.index}__].unit}" required></td>
                     <td data-label="Status walidacji"><span class="badge validation-status" th:text="${row.status().label()}"></span></td>
                     <td data-label="Usuń">
                         <label class="delete-toggle">
@@ -118,6 +121,7 @@
             <td data-label="Barcode"><input name="rows[${index}].barcode" required></td>
             <td data-label="Nazwa"><input name="rows[${index}].name" required></td>
             <td data-label="Oczekiwane"><input name="rows[${index}].expectedQty" type="number" min="0" required></td>
+            <td data-label="JM"><input name="rows[${index}].unit" value="szt" required></td>
             <td data-label="Status walidacji"><span class="badge validation-status">Nowy wiersz</span></td>
             <td data-label="Usuń">
                 <label class="delete-toggle">
@@ -142,6 +146,9 @@
                 }
                 if (input.name.endsWith('.expectedQty')) {
                     input.name = `rows[${index}].expectedQty`;
+                }
+                if (input.name.endsWith('.unit')) {
+                    input.name = `rows[${index}].unit`;
                 }
                 if (input.name.endsWith('.deleted')) {
                     input.name = `rows[${index}].deleted`;
@@ -170,13 +177,14 @@
         });
 
         let hasCriticalErrors = false;
-        let totalQty = 0;
+        const totalQty = new Map();
         let activeRowCount = 0;
         rows.forEach(row => {
             const deleted = isDeleted(row);
             const barcode = getField(row, '.barcode');
             const name = getField(row, '.name');
             const qtyValue = getField(row, '.expectedQty');
+            const unit = normalizeUnit(getField(row, '.unit'));
             let status = deleted ? 'Do usunięcia' : 'OK';
 
             if (deleted) {
@@ -195,6 +203,8 @@
                 status = 'Niepoprawna ilosc';
             } else if (Number(qtyValue) < 0) {
                 status = 'Niepoprawna ilosc';
+            } else if (!unit) {
+                status = 'Brak jednostki';
             } else if ((barcodeCounts.get(barcode) || 0) > 1) {
                 status = 'Duplikat barcode';
             }
@@ -203,8 +213,8 @@
                 hasCriticalErrors = true;
             }
 
-            if (/^\d+$/.test(qtyValue)) {
-                totalQty += Number(qtyValue);
+            if (/^\d+$/.test(qtyValue) && unit) {
+                totalQty.set(unit, (totalQty.get(unit) || 0) + Number(qtyValue));
             }
 
             row.querySelector('.validation-status').textContent = status;
@@ -215,7 +225,7 @@
             summaryRowCount.textContent = String(activeRowCount);
         }
         if (summaryTotalQty) {
-            summaryTotalQty.textContent = String(totalQty);
+            summaryTotalQty.textContent = formatTotals(totalQty);
         }
         if (validationSummary) {
             validationSummary.textContent = hasCriticalErrors
@@ -232,6 +242,21 @@
     function isDeleted(row) {
         const field = Array.from(row.querySelectorAll('input')).find(input => input.name.endsWith('.deleted'));
         return field ? field.checked : false;
+    }
+
+    function normalizeUnit(value) {
+        const normalized = value.trim().toLowerCase().replace(/[.\s,;:]+$/g, '');
+        if (normalized === 'sz' || normalized === 'sztuk' || normalized === 'sztuki') {
+            return 'szt';
+        }
+        return normalized;
+    }
+
+    function formatTotals(totals) {
+        const parts = Array.from(totals.entries())
+            .filter(([, quantity]) => quantity > 0)
+            .map(([unit, quantity]) => `${quantity} ${unit}`);
+        return parts.length ? parts.join(', ') : '0';
     }
 
     attachValidationListeners();

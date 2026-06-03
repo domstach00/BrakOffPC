@@ -17,25 +17,28 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.multipart.MultipartFile;
+import org.wodrol.brakoffpc.common.MeasurementUnit;
 import org.wodrol.brakoffpc.desktop.AppStartupSettings;
 import org.wodrol.brakoffpc.desktop.AppStartupSettingsService;
 import org.wodrol.brakoffpc.desktop.WindowsAutoStartService;
+import org.wodrol.brakoffpc.delivery.DashboardRow;
+import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentForm;
+import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRow;
+import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRowInput;
 import org.wodrol.brakoffpc.delivery.DeliveryService;
+import org.wodrol.brakoffpc.delivery.DeliveryStatus;
 import org.wodrol.brakoffpc.imports.ImportDraft;
 import org.wodrol.brakoffpc.imports.ImportDraftItem;
 import org.wodrol.brakoffpc.imports.ImportRowForm;
 import org.wodrol.brakoffpc.imports.PendingImportService;
 import org.wodrol.brakoffpc.imports.PdfImportException;
 import org.wodrol.brakoffpc.imports.ValidatedImportRow;
-import org.springframework.web.multipart.MultipartFile;
-import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentForm;
-import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRow;
-import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRowInput;
-import org.wodrol.brakoffpc.delivery.DashboardRow;
-import org.wodrol.brakoffpc.delivery.DeliveryStatus;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @Controller
@@ -247,6 +250,7 @@ public class HomeController {
                 input.setBarcode(row.barcode());
                 input.setName(row.name());
                 input.setExpectedQty(row.expectedQty() == null ? "" : String.valueOf(row.expectedQty()));
+                input.setUnit(row.unit());
                 return input;
             }).toList());
 
@@ -294,6 +298,7 @@ public class HomeController {
                 input.setBarcode(item.barcode());
                 input.setName(item.name());
                 input.setExpectedQty(item.expectedQty() == null ? "" : String.valueOf(item.expectedQty()));
+                input.setUnit(item.unit());
                 return input;
             }).toList());
 
@@ -434,6 +439,7 @@ public class HomeController {
             input.setBarcode(row.barcode());
             input.setName(row.name());
             input.setExpectedQty(String.valueOf(row.expectedQty()));
+            input.setUnit(row.unit());
             return input;
         }).toList());
         return form;
@@ -487,6 +493,7 @@ public class HomeController {
                     normalize(row.getBarcode()),
                     normalize(row.getName()),
                     parseExpectedQty(row.getExpectedQty()),
+                    MeasurementUnit.normalize(row.getUnit()),
                     row.isDeleted()
             ));
         }
@@ -515,35 +522,57 @@ public class HomeController {
 
     private void populateImportSummary(Model model, List<ValidatedImportRow> rows) {
         model.addAttribute("importRowCount", rows.size());
-        model.addAttribute("importExpectedQtyTotal", rows.stream()
-                .map(ValidatedImportRow::expectedQty)
-                .filter(quantity -> quantity != null && quantity >= 0)
-                .mapToInt(Integer::intValue)
-                .sum());
+        model.addAttribute("importExpectedQtyTotal", formatImportQuantityTotals(rows));
+    }
+
+    private String formatImportQuantityTotals(List<ValidatedImportRow> rows) {
+        Map<String, Integer> totalsByUnit = new LinkedHashMap<>();
+        for (ValidatedImportRow row : rows) {
+            if (row.expectedQty() == null || row.expectedQty() < 0 || row.hasCriticalError()) {
+                continue;
+            }
+            totalsByUnit.merge(MeasurementUnit.normalize(row.unit()), row.expectedQty(), Integer::sum);
+        }
+        return formatQuantityTotals(totalsByUnit);
+    }
+
+    private String formatQuantityTotals(Map<String, Integer> totalsByUnit) {
+        if (totalsByUnit.isEmpty()) {
+            return "0";
+        }
+        return totalsByUnit.entrySet().stream()
+                .map(entry -> MeasurementUnit.format(entry.getValue(), entry.getKey()))
+                .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private void populateDashboardSummary(Model model, List<DashboardRow> rows) {
         int rowCount = rows.size();
 
-        int expectedTotal = rows.stream()
-                .mapToInt(DashboardRow::expectedQty)
-                .sum();
-
-        int scannedTotal = rows.stream()
-                .mapToInt(DashboardRow::scannedQty)
-                .sum();
-
-        int diffTotal = rows.stream()
-                .mapToInt(DashboardRow::difference)
-                .sum();
-
-        String diffLabel = formatDashboardDifferenceLabel(diffTotal);
+        Map<String, Integer> expectedTotals = groupDashboardTotals(rows, DashboardRow::expectedQty);
+        Map<String, Integer> scannedTotals = groupDashboardTotals(rows, DashboardRow::scannedQty);
+        Map<String, Integer> differenceTotals = groupDashboardTotals(rows, DashboardRow::difference);
 
         model.addAttribute("dashboardRowCount", rowCount);
-        model.addAttribute("dashboardExpectedTotal", expectedTotal);
-        model.addAttribute("dashboardScannedTotal", scannedTotal);
-        model.addAttribute("dashboardDifferenceTotal", diffTotal);
-        model.addAttribute("dashboardDifferenceLabel", diffLabel);
+        model.addAttribute("dashboardExpectedTotal", formatQuantityTotals(expectedTotals));
+        model.addAttribute("dashboardScannedTotal", formatQuantityTotals(scannedTotals));
+        model.addAttribute("dashboardScannedTotalZero", totalsAreZero(scannedTotals));
+        model.addAttribute("dashboardDifferenceTotalZero", totalsAreZero(differenceTotals));
+        model.addAttribute("dashboardDifferenceLabel", formatDashboardDifferenceLabel(differenceTotals));
+    }
+
+    private Map<String, Integer> groupDashboardTotals(
+            List<DashboardRow> rows,
+            java.util.function.ToIntFunction<DashboardRow> quantityExtractor
+    ) {
+        Map<String, Integer> totalsByUnit = new LinkedHashMap<>();
+        for (DashboardRow row : rows) {
+            totalsByUnit.merge(MeasurementUnit.normalize(row.unit()), quantityExtractor.applyAsInt(row), Integer::sum);
+        }
+        return totalsByUnit;
+    }
+
+    private boolean totalsAreZero(Map<String, Integer> totalsByUnit) {
+        return totalsByUnit.values().stream().allMatch(quantity -> quantity == 0);
     }
 
     private void populateStartupSettings(Model model) {
@@ -562,13 +591,25 @@ public class HomeController {
         return value.trim().replaceAll("/+$", "");
     }
 
-    private String formatDashboardDifferenceLabel(int diffTotal) {
-        if (diffTotal < 0) {
-            return "Różnica: " + Math.abs(diffTotal) + " (nadmiar)";
+    private String formatDashboardDifferenceLabel(Map<String, Integer> differenceTotals) {
+        Map<String, Integer> missing = new LinkedHashMap<>();
+        Map<String, Integer> excess = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : differenceTotals.entrySet()) {
+            if (entry.getValue() > 0) {
+                missing.put(entry.getKey(), entry.getValue());
+            }
+            if (entry.getValue() < 0) {
+                excess.put(entry.getKey(), Math.abs(entry.getValue()));
+            }
         }
-        if (diffTotal > 0) {
-            return "Różnica: " + diffTotal + " (brak)";
+
+        List<String> parts = new ArrayList<>();
+        if (!missing.isEmpty()) {
+            parts.add(formatQuantityTotals(missing) + " brak");
         }
-        return "Różnica: 0 (zgodność)";
+        if (!excess.isEmpty()) {
+            parts.add(formatQuantityTotals(excess) + " nadmiar");
+        }
+        return parts.isEmpty() ? "Różnica: 0" : "Różnica: " + String.join(", ", parts);
     }
 }

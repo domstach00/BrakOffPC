@@ -81,6 +81,7 @@ class PdfImportServiceTest {
         assertEquals("000123456789", items.get(0).barcode());
         assertEquals("Produkt testowy A", items.get(0).name());
         assertEquals(12, items.get(0).expectedQty());
+        assertEquals("szt", items.get(0).unit());
         assertEquals("998877665544", items.get(1).barcode());
     }
 
@@ -97,6 +98,7 @@ class PdfImportServiceTest {
         assertEquals("123456789012", items.get(0).barcode());
         assertEquals("Przewod USB-C", items.get(0).name());
         assertEquals(4, items.get(0).expectedQty());
+        assertEquals("szt", items.get(0).unit());
         assertEquals("00000055", items.get(1).barcode());
     }
 
@@ -108,9 +110,11 @@ class PdfImportServiceTest {
         assertEquals("5906900702639", items.getFirst().barcode());
         assertEquals("KUBKI DO PIWA 500ML wielokrotnego uzytku 6szt", items.getFirst().name());
         assertEquals(10, items.getFirst().expectedQty());
+        assertEquals("szt", items.getFirst().unit());
         assertEquals("5906900003064", items.getLast().barcode());
         assertEquals("TACKI PAPIEROWE 13,5X20,5CM 12SZT", items.getLast().name());
         assertEquals(25, items.getLast().expectedQty());
+        assertEquals("szt", items.getLast().unit());
     }
 
     @Test
@@ -121,12 +125,50 @@ class PdfImportServiceTest {
         assertEquals("5901448340046", items.getFirst().barcode());
         assertEquals("PCHACZ MOTYL", items.getFirst().name());
         assertEquals(1, items.getFirst().expectedQty());
+        assertEquals("szt", items.getFirst().unit());
         assertEquals("5907803717102", items.get(2).barcode());
         assertEquals("TOREBKA OZDOBNA PAW T-2L 10-SZT 22.5 X 31.5 X 11 CM", items.get(2).name());
         assertEquals(10, items.get(2).expectedQty());
         assertEquals("5902414008908", items.getLast().barcode());
         assertEquals("MODELINA INSPIRIA 6 KOLOROW", items.getLast().name());
         assertEquals(1, items.getLast().expectedQty());
+        assertEquals("kpl", items.getLast().unit());
+    }
+
+    @Test
+    void parsesArbitraryMeasurementUnits() {
+        String text = """
+                Kod Nazwa Ilosc jm.
+                1 5900000000001 REKAWICE ROBOCZE 5,00 PLN 5 para
+                2 5900000000002 LISTWA PRZYPODLOGOWA 12,00 PLN 10 mb
+                Razem 2
+                """;
+
+        List<ImportDraftItem> items = pdfImportService.parseLines(text);
+
+        assertEquals(2, items.size());
+        assertEquals("para", items.get(0).unit());
+        assertEquals(5, items.get(0).expectedQty());
+        assertEquals("mb", items.get(1).unit());
+        assertEquals(10, items.get(1).expectedQty());
+    }
+
+    @Test
+    void ignoresTrailingPriceColumnsAfterQuantityAndUnit() {
+        String text = """
+                Kod Nazwa Ilosc jm.
+                1 5900000000001 REKAWICE ROBOCZE 5 para 12,50 PLN
+                2 5900000000002 LISTWA PRZYPODLOGOWA 10 19.99
+                Razem 2
+                """;
+
+        List<ImportDraftItem> items = pdfImportService.parseLines(text);
+
+        assertEquals(2, items.size());
+        assertEquals(5, items.get(0).expectedQty());
+        assertEquals("para", items.get(0).unit());
+        assertEquals(10, items.get(1).expectedQty());
+        assertEquals("szt", items.get(1).unit());
     }
 
     @Test

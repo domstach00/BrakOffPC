@@ -902,6 +902,7 @@ table {
 }
 
 .editable-table .col-expected,
+.editable-table .col-unit,
 .editable-table .col-scanned {
     width: 9%;
 }
@@ -923,6 +924,10 @@ table {
     width: 10%;
 }
 
+.import-review-table .col-unit {
+    width: 8%;
+}
+
 .import-review-table .col-status {
     width: 15%;
 }
@@ -936,6 +941,7 @@ table {
 }
 
 .editable-table td[data-label="Oczekiwane"] input,
+.editable-table td[data-label="JM"] input,
 .editable-table td[data-label="Zeskanowane"] input {
     min-width: 86px;
     text-align: right;

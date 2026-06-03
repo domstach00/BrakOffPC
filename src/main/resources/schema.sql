@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS pending_import_item (
     barcode TEXT,
     name TEXT NOT NULL,
     expected_qty INTEGER,
+    unit TEXT NOT NULL DEFAULT 'szt',
     FOREIGN KEY (import_id) REFERENCES pending_import (id) ON DELETE CASCADE
 );
 
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS delivery_item (
     barcode TEXT NOT NULL,
     name TEXT NOT NULL,
     expected_qty INTEGER NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'szt',
     FOREIGN KEY (delivery_id) REFERENCES delivery (id) ON DELETE CASCADE
 );
 

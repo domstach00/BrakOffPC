@@ -33,10 +33,10 @@ public class DeliveryRepository {
 
         for (DeliveryItem item : delivery.items()) {
             jdbcClient.sql("""
-                    insert into delivery_item (delivery_id, barcode, name, expected_qty)
-                    values (?, ?, ?, ?)
+                    insert into delivery_item (delivery_id, barcode, name, expected_qty, unit)
+                    values (?, ?, ?, ?, ?)
                     """)
-                    .params(delivery.id(), item.barcode(), item.name(), item.expectedQty())
+                    .params(delivery.id(), item.barcode(), item.name(), item.expectedQty(), item.unit())
                     .update();
         }
     }
@@ -187,7 +187,7 @@ public class DeliveryRepository {
 
     public List<DeliveryItem> findItems(String deliveryId) {
         return jdbcClient.sql("""
-                select barcode, name, expected_qty
+                select barcode, name, expected_qty, unit
                 from delivery_item
                 where delivery_id = ?
                 order by barcode
@@ -197,7 +197,8 @@ public class DeliveryRepository {
                         deliveryId,
                         rs.getString("barcode"),
                         rs.getString("name"),
-                        rs.getInt("expected_qty")))
+                        rs.getInt("expected_qty"),
+                        rs.getString("unit")))
                 .list();
     }
 
@@ -208,10 +209,10 @@ public class DeliveryRepository {
 
         for (DeliveryItem item : items) {
             jdbcClient.sql("""
-                    insert into delivery_item (delivery_id, barcode, name, expected_qty)
-                    values (?, ?, ?, ?)
+                    insert into delivery_item (delivery_id, barcode, name, expected_qty, unit)
+                    values (?, ?, ?, ?, ?)
                     """)
-                    .params(deliveryId, item.barcode(), item.name(), item.expectedQty())
+                    .params(deliveryId, item.barcode(), item.name(), item.expectedQty(), item.unit())
                     .update();
         }
     }

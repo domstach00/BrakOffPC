@@ -29,10 +29,10 @@ public class PendingImportRepository {
 
         for (ImportDraftItem item : draft.items()) {
             jdbcClient.sql("""
-                    insert into pending_import_item (import_id, row_order, barcode, name, expected_qty)
-                    values (?, ?, ?, ?, ?)
+                    insert into pending_import_item (import_id, row_order, barcode, name, expected_qty, unit)
+                    values (?, ?, ?, ?, ?, ?)
                     """)
-                    .params(draft.id(), item.rowOrder(), item.barcode(), item.name(), item.expectedQty())
+                    .params(draft.id(), item.rowOrder(), item.barcode(), item.name(), item.expectedQty(), item.unit())
                     .update();
         }
     }
@@ -69,7 +69,7 @@ public class PendingImportRepository {
 
     private List<ImportDraftItem> findItems(String importId) {
         return jdbcClient.sql("""
-                select row_order, barcode, name, expected_qty
+                select row_order, barcode, name, expected_qty, unit
                 from pending_import_item
                 where import_id = ?
                 order by row_order
@@ -79,7 +79,8 @@ public class PendingImportRepository {
                         rs.getInt("row_order"),
                         rs.getString("barcode"),
                         rs.getString("name"),
-                        getNullableInt(rs, "expected_qty")))
+                        getNullableInt(rs, "expected_qty"),
+                        rs.getString("unit")))
                 .list();
     }
 

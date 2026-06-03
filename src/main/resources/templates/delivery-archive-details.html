@@ -103,9 +103,9 @@
                 <tr th:each="row : ${dashboardRows}">
                     <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
                     <td data-label="Nazwa" th:text="${row.name()}"></td>
-                    <td data-label="Oczekiwane" th:text="${row.expectedQty()}"></td>
-                    <td data-label="Zeskanowane" th:text="${row.scannedQty()}"></td>
-                    <td data-label="Różnica" th:text="${row.difference()}"></td>
+                    <td data-label="Oczekiwane" th:text="${row.expectedQty() + ' ' + row.unit()}"></td>
+                    <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
+                    <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
                     <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
                 </tr>
                 </tbody>
@@ -144,7 +144,7 @@
                     </td>
                     <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
                     <td data-label="Nazwa" th:text="${row.name()}"></td>
-                    <td data-label="Ilość" th:text="${row.quantity()}"></td>
+                    <td data-label="Ilość" th:text="${row.quantity() + ' ' + row.unit()}"></td>
                     <td data-label="Revision" th:text="${row.revision()}"></td>
                     <td data-label="UpdatedAt" th:text="${row.updatedAt()}"></td>
                 </tr>

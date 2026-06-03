@@ -1,6 +1,7 @@
 package org.wodrol.brakoffpc.imports;
 
 import org.springframework.stereotype.Service;
+import org.wodrol.brakoffpc.common.MeasurementUnit;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,7 @@ public class ImportValidationService {
                         normalize(item.barcode()),
                         normalize(item.name()),
                         item.expectedQty(),
+                        MeasurementUnit.normalize(item.unit()),
                         determineStatus(item, barcodeCounts)))
                 .toList();
     }

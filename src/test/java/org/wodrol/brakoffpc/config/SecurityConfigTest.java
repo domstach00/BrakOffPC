@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
+        "app.sqlite.path=/tmp/brakoffpc-security-test.db",
         "app.security.operator.username=test-operator",
         "app.security.operator.password=test-password",
         "app.security.mobile.token=test-mobile-token"
