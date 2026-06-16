@@ -53,38 +53,54 @@
             <div class="panel-heading">
                 <div>
                     <p class="section-kicker">Bieżąca praca</p>
-                    <h2>Aktywna dostawa</h2>
+                    <h2>Aktywne dostawy</h2>
                 </div>
                 <span class="badge"
-                      th:classappend="${activeDelivery != null ? ' badge-ok' : ''}"
-                      th:title="${activeDelivery != null ? T(org.wodrol.brakoffpc.delivery.DeliveryStatus).description(activeDelivery.status()) : 'Brak aktywnej dostawy do skanowania.'}"
-                      th:text="${activeDelivery != null ? 'AKTYWNA' : 'BRAK'}"></span>
+                      th:classappend="${!#lists.isEmpty(activeDeliveries) ? ' badge-ok' : ''}"
+                      th:title="${!#lists.isEmpty(activeDeliveries) ? 'Dostawy dostępne do skanowania.' : 'Brak aktywnej dostawy do skanowania.'}"
+                      th:text="${!#lists.isEmpty(activeDeliveries) ? #lists.size(activeDeliveries) + ' AKTYWNE' : 'BRAK'}"></span>
             </div>
-            <div th:if="${activeDelivery != null}">
-                <dl class="meta-list">
-                    <div>
-                        <dt>Plik</dt>
-                        <dd th:text="${activeDelivery.sourceFileName()}"></dd>
-                    </div>
-                    <div>
-                        <dt>ID</dt>
-                        <dd th:text="${activeDelivery.id()}"></dd>
-                    </div>
-                    <div>
-                        <dt>Aktywowana</dt>
-                        <dd th:text="${T(org.wodrol.brakoffpc.web.PolishDateTimeFormatter).format(activeDelivery.activatedAt())}"></dd>
-                    </div>
-                </dl>
-                <div class="actions">
-                    <a class="button secondary" th:href="@{/deliveries/report.pdf}">Generuj raport końcowy</a>
-                    <a class="button ghost" th:href="@{/deliveries/edit}">Edytuj produkty dostawy</a>
+            <div th:if="${!#lists.isEmpty(activeDeliveries)}">
+                <div class="table-shell">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Plik</th>
+                            <th>ID</th>
+                            <th>Aktywowana</th>
+                            <th>Pozycje</th>
+                            <th>Akcja</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="delivery : ${activeDeliveries}">
+                            <td data-label="Plik" th:text="${delivery.sourceFileName()}"></td>
+                            <td data-label="ID">
+                                <span class="mono"
+                                      th:title="${delivery.id()}"
+                                      th:text="${#strings.length(delivery.id()) > 6 ? '...' + #strings.substring(delivery.id(), #strings.length(delivery.id()) - 6, #strings.length(delivery.id())) : delivery.id()}"></span>
+                            </td>
+                            <td data-label="Aktywowana" th:text="${T(org.wodrol.brakoffpc.web.PolishDateTimeFormatter).format(delivery.activatedAt())}"></td>
+                            <td data-label="Pozycje" th:text="${#lists.size(delivery.items())}"></td>
+                            <td data-label="Akcja">
+                                <div class="actions">
+                                    <a class="button secondary" th:href="@{'/deliveries/' + ${delivery.id()}}">Podgląd</a>
+                                    <a class="button ghost" th:href="@{'/deliveries/' + ${delivery.id()} + '/report.pdf'}">Raport</a>
+                                    <a class="button ghost" th:href="@{'/deliveries/' + ${delivery.id()} + '/edit'}">Edytuj</a>
+                                    <form method="post" th:action="@{'/deliveries/' + ${delivery.id()} + '/close'}">
+                                        <button type="submit" class="danger">Zakończ</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="actions top-gap">
                     <a class="button ghost" th:href="@{/deliveries/archive}">Archiwum dostaw</a>
-                    <form method="post" th:action="@{/deliveries/reset}">
-                        <button type="submit" class="danger">Zakończ dostawę</button>
-                    </form>
                 </div>
             </div>
-            <div class="empty-state" th:if="${activeDelivery == null}">
+            <div class="empty-state" th:if="${#lists.isEmpty(activeDeliveries)}">
                 <strong>Brak aktywnej dostawy</strong>
                 <p>Najpierw zaimportuj PDF dostawy i zatwierdź, aby telefony mogły pobrać dane.</p>
                 <div class="actions margin-top-5px">
@@ -98,83 +114,107 @@
         <div class="panel-header">
             <div>
                 <p class="section-kicker">Monitorowanie</p>
-                <h2>Oczekiwane i zeskanowane produkty</h2>
-            </div>
-            <div class="actions" id="dashboard-summary">
-                <a class="button ghost" th:if="${activeDelivery != null}" th:href="@{/deliveries/edit}">Edytuj tabelę</a>
-                <span class="count-badge" id="dashboard-row-count" th:text="${dashboardRowCount + ' pozycji'}"></span>
-                <span class="count-badge" id="dashboard-expected-total" th:text="${'Oczekiwane: ' + dashboardExpectedTotal}"></span>
-                <span class="count-badge" id="dashboard-scanned-total" th:classappend="${dashboardScannedTotalZero ? ' hidden' : ''}" th:text="${'Zeskanowane: ' + dashboardScannedTotal}"></span>
-                <span class="count-badge" id="dashboard-difference-total" th:classappend="${dashboardDifferenceTotalZero ? ' hidden' : ''}" th:text="${dashboardDifferenceLabel}"></span>
+                <h2>Oczekiwane i zeskanowane produkty per dostawa</h2>
             </div>
         </div>
-        <div class="table-shell" id="dashboard-table-shell" th:classappend="${#lists.isEmpty(dashboardRows) ? ' hidden' : ''}">
-        <table>
-            <thead>
-            <tr>
-                <th>Barcode</th>
-                <th>Nazwa</th>
-                <th>Oczekiwane</th>
-                <th>Zeskanowane</th>
-                <th>Różnica</th>
-                <th>Status</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="row : ${dashboardRows}">
-                <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
-                <td data-label="Nazwa" th:text="${row.name()}"></td>
-                <td data-label="Oczekiwane" th:text="${row.expectedQty() + ' ' + row.unit()}"></td>
-                <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
-                <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
-                <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
-            </tr>
-            </tbody>
-        </table>
+
+        <div class="delivery-monitor-list" id="delivery-monitor-list" th:classappend="${#lists.isEmpty(activeDeliveryMonitors) ? ' hidden' : ''}">
+            <details class="delivery-monitor" th:each="monitor : ${activeDeliveryMonitors}" th:attr="data-delivery-id=${monitor.delivery().id()}">
+                <summary>
+                    <span class="delivery-monitor-title">
+                        <strong th:text="${monitor.delivery().sourceFileName()}"></strong>
+                        <small>
+                            <span class="mono" th:text="${#strings.length(monitor.delivery().id()) > 6 ? '...' + #strings.substring(monitor.delivery().id(), #strings.length(monitor.delivery().id()) - 6, #strings.length(monitor.delivery().id())) : monitor.delivery().id()}"></span>
+                        </small>
+                    </span>
+                    <span class="delivery-monitor-summary">
+                        <span class="count-badge" th:text="${monitor.rowCount() + ' pozycji'}"></span>
+                        <span class="count-badge" th:text="${'Oczekiwane: ' + monitor.expectedTotal()}"></span>
+                        <span class="count-badge" th:classappend="${monitor.scannedTotalZero() ? ' hidden' : ''}" th:text="${'Zeskanowane: ' + monitor.scannedTotal()}"></span>
+                        <span class="count-badge" th:classappend="${monitor.differenceTotalZero() ? ' hidden' : ''}" th:text="${monitor.differenceLabel()}"></span>
+                    </span>
+                </summary>
+
+                <div class="delivery-monitor-body">
+                    <div class="actions delivery-monitor-actions">
+                        <a class="button secondary" th:href="@{'/deliveries/' + ${monitor.delivery().id()}}">Podgląd dostawy</a>
+                        <a class="button ghost" th:href="@{'/deliveries/' + ${monitor.delivery().id()} + '/edit'}">Edytuj tabelę</a>
+                        <a class="button ghost" th:href="@{'/deliveries/' + ${monitor.delivery().id()} + '/report.pdf'}">Raport</a>
+                    </div>
+
+                    <div class="table-shell" th:if="${!#lists.isEmpty(monitor.rows())}">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Barcode</th>
+                                <th>Nazwa</th>
+                                <th>Oczekiwane</th>
+                                <th>Zeskanowane</th>
+                                <th>Różnica</th>
+                                <th>Status</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="row : ${monitor.rows()}">
+                                <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
+                                <td data-label="Nazwa" th:text="${row.name()}"></td>
+                                <td data-label="Oczekiwane" th:text="${row.expectedQty() + ' ' + row.unit()}"></td>
+                                <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
+                                <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
+                                <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state" th:if="${#lists.isEmpty(monitor.rows())}">
+                        <strong>Brak danych produktów</strong>
+                        <p>Ta dostawa nie zawiera pozycji do monitorowania.</p>
+                    </div>
+
+                    <div class="panel-header delivery-monitor-subheader">
+                        <div>
+                            <p class="section-kicker">Szczegóły</p>
+                            <h2>Stany per urządzenie</h2>
+                        </div>
+                        <span class="count-badge" th:text="${#lists.size(monitor.deviceRows()) + ' wpisow'}"></span>
+                    </div>
+
+                    <div class="table-shell" th:if="${!#lists.isEmpty(monitor.deviceRows())}">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Urządzenie</th>
+                                <th>Barcode</th>
+                                <th>Nazwa</th>
+                                <th>Ilość</th>
+                                <th>Revision</th>
+                                <th>Zaktualizowano</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="row : ${monitor.deviceRows()}">
+                                <td data-label="Urządzenie">
+                                    <span class="mono" th:title="${row.deviceId()}" th:text="${row.deviceName()}"></span>
+                                </td>
+                                <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
+                                <td data-label="Nazwa" th:text="${row.name()}"></td>
+                                <td data-label="Ilość" th:text="${row.quantity() + ' ' + row.unit()}"></td>
+                                <td data-label="Revision" th:text="${row.revision()}"></td>
+                                <td data-label="UpdatedAt" th:text="${row.updatedAt()}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state" th:if="${#lists.isEmpty(monitor.deviceRows())}">
+                        <strong>Brak danych z telefonów</strong>
+                        <p>Widok per urządzenie uzupełni się po pierwszych skanach tej dostawy.</p>
+                    </div>
+                </div>
+            </details>
         </div>
-        <div class="empty-state" id="dashboard-empty-state" th:classappend="${!#lists.isEmpty(dashboardRows) ? ' hidden' : ''}">
+        <div class="empty-state" id="delivery-monitor-empty" th:classappend="${!#lists.isEmpty(activeDeliveryMonitors) ? ' hidden' : ''}">
             <strong>Dashboard pojawi się po aktywacji dostawy</strong>
             <p>Po imporcie i zatwierdzeniu dostawy tutaj zobaczysz brakujace, nadmiarowe i niezamowione produkty.</p>
-        </div>
-    </section>
-
-    <section class="panel table-panel">
-        <div class="panel-header">
-            <div>
-                <p class="section-kicker">Szczegóły</p>
-                <h2>Stany per urządzenie</h2>
-            </div>
-            <span class="count-badge" id="device-row-count" th:text="${#lists.size(deviceRows) + ' wpisow'}"></span>
-        </div>
-        <div class="table-shell" id="device-table-shell" th:classappend="${#lists.isEmpty(deviceRows) ? ' hidden' : ''}">
-        <table>
-            <thead>
-            <tr>
-                <th>Urządzenie</th>
-                <th>Barcode</th>
-                <th>Nazwa</th>
-                <th>Ilość</th>
-                <th>Revision</th>
-                <th>Zaktualizowano</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="row : ${deviceRows}">
-                <td data-label="Urządzenie">
-                    <span class="mono" th:title="${row.deviceId()}" th:text="${row.deviceName()}"></span>
-                </td>
-                <td data-label="Barcode"><span class="mono" th:text="${row.barcode()}"></span></td>
-                <td data-label="Nazwa" th:text="${row.name()}"></td>
-                <td data-label="Ilość" th:text="${row.quantity() + ' ' + row.unit()}"></td>
-                <td data-label="Revision" th:text="${row.revision()}"></td>
-                <td data-label="UpdatedAt" th:text="${row.updatedAt()}"></td>
-            </tr>
-            </tbody>
-        </table>
-        </div>
-        <div class="empty-state" id="device-empty-state" th:classappend="${!#lists.isEmpty(deviceRows) ? ' hidden' : ''}">
-            <strong>Brak danych z telefonów</strong>
-            <p>Widok per urządzenie uzupełni się automatycznie po pierwszych skanach z Androida.</p>
         </div>
     </section>
 
@@ -259,19 +299,10 @@
     const uploadForm = document.getElementById('upload-form');
     const uploadButton = document.getElementById('upload-submit');
     const uploadProgress = document.getElementById('upload-progress');
-    const dashboardTableShell = document.getElementById('dashboard-table-shell');
-    const dashboardTableBody = dashboardTableShell?.querySelector('tbody');
-    const dashboardEmptyState = document.getElementById('dashboard-empty-state');
-    const dashboardRowCount = document.getElementById('dashboard-row-count');
-    const dashboardExpectedTotal = document.getElementById('dashboard-expected-total');
-    const dashboardScannedTotal = document.getElementById('dashboard-scanned-total');
-    const dashboardDifferenceTotal = document.getElementById('dashboard-difference-total');
-    const deviceTableShell = document.getElementById('device-table-shell');
-    const deviceTableBody = deviceTableShell?.querySelector('tbody');
-    const deviceEmptyState = document.getElementById('device-empty-state');
-    const deviceRowCount = document.getElementById('device-row-count');
-    const dashboardPollIntervalMs = 5000;
-    let dashboardRefreshInFlight = false;
+    const deliveryMonitorList = document.getElementById('delivery-monitor-list');
+    const deliveryMonitorEmpty = document.getElementById('delivery-monitor-empty');
+    const monitorPollIntervalMs = 5000;
+    let monitorRefreshInFlight = false;
 
     uploadForm?.addEventListener('submit', () => {
         uploadButton.disabled = true;
@@ -286,87 +317,6 @@
         element.classList.toggle('hidden', !visible);
     }
 
-    function createCell(label, content, mono = false, title = null) {
-        const cell = document.createElement('td');
-        cell.dataset.label = label;
-
-        if (mono) {
-            const span = document.createElement('span');
-            span.className = 'mono';
-            span.textContent = content;
-            if (title) {
-                span.title = title;
-            }
-            cell.appendChild(span);
-            return cell;
-        }
-
-        if (title) {
-            cell.title = title;
-        }
-        cell.textContent = content;
-        return cell;
-    }
-
-    function createBadgeCell(label, content) {
-        const cell = document.createElement('td');
-        cell.dataset.label = label;
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = content;
-        cell.appendChild(badge);
-        return cell;
-    }
-
-    function resolveDashboardStatus(row) {
-        if (row?.unordered) {
-            return 'Niezamowiony';
-        }
-        if ((row?.difference ?? 0) > 0) {
-            return 'Brakuje';
-        }
-        if ((row?.difference ?? 0) < 0) {
-            return 'Nadmiar';
-        }
-        return 'OK';
-    }
-
-    function renderDashboardRows(rows) {
-        if (!dashboardTableBody) {
-            return;
-        }
-
-        dashboardTableBody.replaceChildren();
-        for (const row of rows) {
-            const tr = document.createElement('tr');
-            tr.appendChild(createCell('Barcode', row.barcode ?? '', true));
-            tr.appendChild(createCell('Nazwa', row.name ?? ''));
-            tr.appendChild(createCell('Oczekiwane', formatQuantity(row.expectedQty ?? 0, row.unit)));
-            tr.appendChild(createCell('Zeskanowane', formatQuantity(row.scannedQty ?? 0, row.unit)));
-            tr.appendChild(createCell('Różnica', formatQuantity(row.difference ?? 0, row.unit)));
-            tr.appendChild(createBadgeCell('Status', resolveDashboardStatus(row)));
-            dashboardTableBody.appendChild(tr);
-        }
-    }
-
-    function renderDeviceRows(rows) {
-        if (!deviceTableBody) {
-            return;
-        }
-
-        deviceTableBody.replaceChildren();
-        for (const row of rows) {
-            const tr = document.createElement('tr');
-            tr.appendChild(createCell('Urządzenie', row.deviceName ?? row.deviceId ?? '', true, row.deviceId ?? ''));
-            tr.appendChild(createCell('Barcode', row.barcode ?? '', true));
-            tr.appendChild(createCell('Nazwa', row.name ?? ''));
-            tr.appendChild(createCell('Ilość', formatQuantity(row.quantity ?? 0, row.unit)));
-            tr.appendChild(createCell('Revision', String(row.revision ?? 0)));
-            tr.appendChild(createCell('UpdatedAt', row.updatedAt ?? ''));
-            deviceTableBody.appendChild(tr);
-        }
-    }
-
     function normalizeUnit(unit) {
         const normalized = String(unit ?? 'szt').trim().toLowerCase().replace(/[.\s,;:]+$/g, '');
         if (normalized === 'sz' || normalized === 'sztuk' || normalized === 'sztuki' || normalized === '') {
@@ -377,6 +327,11 @@
 
     function formatQuantity(quantity, unit) {
         return `${quantity} ${normalizeUnit(unit)}`;
+    }
+
+    function shortId(id) {
+        const value = String(id ?? '');
+        return value.length > 6 ? `...${value.slice(-6)}` : value;
     }
 
     function groupQuantityTotals(rows, valueSelector) {
@@ -399,7 +354,7 @@
         return Array.from(totals.values()).every(quantity => quantity === 0);
     }
 
-    function formatDashboardDifferenceLabel(differenceTotals) {
+    function formatDifferenceLabel(differenceTotals) {
         const missing = new Map(Array.from(differenceTotals.entries()).filter(([, quantity]) => quantity > 0));
         const excess = new Map(Array.from(differenceTotals.entries()).filter(([, quantity]) => quantity < 0));
         const parts = [];
@@ -412,80 +367,225 @@
         return parts.length ? `Różnica: ${parts.join(', ')}` : 'Różnica: 0';
     }
 
-    function updateDashboardSummary(rows) {
+    function rowStatus(row) {
+        if (row?.unordered) {
+            return 'Niezamowiony';
+        }
+        if ((row?.difference ?? 0) > 0) {
+            return 'Brakuje';
+        }
+        if ((row?.difference ?? 0) < 0) {
+            return 'Nadmiar';
+        }
+        return 'OK';
+    }
+
+    function createElement(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) {
+            element.className = className;
+        }
+        if (text !== undefined && text !== null) {
+            element.textContent = text;
+        }
+        return element;
+    }
+
+    function createCell(label, content, mono = false, title = null) {
+        const cell = createElement('td');
+        cell.dataset.label = label;
+        if (!mono) {
+            cell.textContent = content ?? '';
+            if (title) {
+                cell.title = title;
+            }
+            return cell;
+        }
+
+        const span = createElement('span', 'mono', content ?? '');
+        if (title) {
+            span.title = title;
+        }
+        cell.appendChild(span);
+        return cell;
+    }
+
+    function createBadgeCell(label, content) {
+        const cell = createElement('td');
+        cell.dataset.label = label;
+        cell.appendChild(createElement('span', 'badge', content));
+        return cell;
+    }
+
+    function createTable(headers, rows, rowRenderer) {
+        const shell = createElement('div', 'table-shell');
+        const table = createElement('table');
+        const thead = createElement('thead');
+        const headerRow = createElement('tr');
+        for (const header of headers) {
+            headerRow.appendChild(createElement('th', null, header));
+        }
+        thead.appendChild(headerRow);
+        const tbody = createElement('tbody');
+        for (const row of rows) {
+            tbody.appendChild(rowRenderer(row));
+        }
+        table.append(thead, tbody);
+        shell.appendChild(table);
+        return shell;
+    }
+
+    function createAction(href, label, className = 'button ghost') {
+        const link = createElement('a', className, label);
+        link.href = href;
+        return link;
+    }
+
+    function renderMonitor(monitor, openDeliveryIds) {
+        const delivery = monitor.delivery ?? {};
+        const rows = Array.isArray(monitor.rows) ? monitor.rows : [];
+        const deviceRows = Array.isArray(monitor.deviceRows) ? monitor.deviceRows : [];
+        const deliveryId = delivery.deliveryId ?? '';
+
+        const details = createElement('details', 'delivery-monitor');
+        details.dataset.deliveryId = deliveryId;
+        details.open = openDeliveryIds.has(deliveryId);
+
+        const summary = createElement('summary');
+        const title = createElement('span', 'delivery-monitor-title');
+        title.appendChild(createElement('strong', null, delivery.sourceFileName ?? 'Dostawa'));
+        const small = createElement('small');
+        small.appendChild(createElement('span', 'mono', shortId(deliveryId)));
+        title.appendChild(small);
+
         const expectedTotals = groupQuantityTotals(rows, row => row.expectedQty);
         const scannedTotals = groupQuantityTotals(rows, row => row.scannedQty);
         const differenceTotals = groupQuantityTotals(rows, row => row.difference);
+        const summaryBadges = createElement('span', 'delivery-monitor-summary');
+        summaryBadges.appendChild(createElement('span', 'count-badge', `${rows.length} pozycji`));
+        summaryBadges.appendChild(createElement('span', 'count-badge', `Oczekiwane: ${formatGroupedTotals(expectedTotals)}`));
+        if (!totalsAreZero(scannedTotals)) {
+            summaryBadges.appendChild(createElement('span', 'count-badge', `Zeskanowane: ${formatGroupedTotals(scannedTotals)}`));
+        }
+        if (!totalsAreZero(differenceTotals)) {
+            summaryBadges.appendChild(createElement('span', 'count-badge', formatDifferenceLabel(differenceTotals)));
+        }
+        summary.append(title, summaryBadges);
 
-        if (dashboardRowCount) {
-            dashboardRowCount.textContent = `${rows.length} pozycji`;
+        const body = createElement('div', 'delivery-monitor-body');
+        const actions = createElement('div', 'actions delivery-monitor-actions');
+        actions.append(
+            createAction(`/deliveries/${deliveryId}`, 'Podgląd dostawy', 'button secondary'),
+            createAction(`/deliveries/${deliveryId}/edit`, 'Edytuj tabelę'),
+            createAction(`/deliveries/${deliveryId}/report.pdf`, 'Raport')
+        );
+        body.appendChild(actions);
+
+        if (rows.length > 0) {
+            body.appendChild(createTable(
+                ['Barcode', 'Nazwa', 'Oczekiwane', 'Zeskanowane', 'Różnica', 'Status'],
+                rows,
+                row => {
+                    const tr = createElement('tr');
+                    tr.append(
+                        createCell('Barcode', row.barcode, true),
+                        createCell('Nazwa', row.name),
+                        createCell('Oczekiwane', formatQuantity(row.expectedQty ?? 0, row.unit)),
+                        createCell('Zeskanowane', formatQuantity(row.scannedQty ?? 0, row.unit)),
+                        createCell('Różnica', formatQuantity(row.difference ?? 0, row.unit)),
+                        createBadgeCell('Status', rowStatus(row))
+                    );
+                    return tr;
+                }
+            ));
+        } else {
+            const empty = createElement('div', 'empty-state');
+            empty.append(createElement('strong', null, 'Brak danych produktów'), createElement('p', null, 'Ta dostawa nie zawiera pozycji do monitorowania.'));
+            body.appendChild(empty);
         }
-        if (dashboardExpectedTotal) {
-            dashboardExpectedTotal.textContent = `Oczekiwane: ${formatGroupedTotals(expectedTotals)}`;
+
+        const deviceHeader = createElement('div', 'panel-header delivery-monitor-subheader');
+        const deviceHeaderText = createElement('div');
+        deviceHeaderText.append(createElement('p', 'section-kicker', 'Szczegóły'), createElement('h2', null, 'Stany per urządzenie'));
+        deviceHeader.append(deviceHeaderText, createElement('span', 'count-badge', `${deviceRows.length} wpisow`));
+        body.appendChild(deviceHeader);
+
+        if (deviceRows.length > 0) {
+            body.appendChild(createTable(
+                ['Urządzenie', 'Barcode', 'Nazwa', 'Ilość', 'Revision', 'Zaktualizowano'],
+                deviceRows,
+                row => {
+                    const tr = createElement('tr');
+                    tr.append(
+                        createCell('Urządzenie', row.deviceName ?? row.deviceId ?? '', true, row.deviceId ?? ''),
+                        createCell('Barcode', row.barcode, true),
+                        createCell('Nazwa', row.name),
+                        createCell('Ilość', formatQuantity(row.quantity ?? 0, row.unit)),
+                        createCell('Revision', String(row.revision ?? 0)),
+                        createCell('UpdatedAt', row.updatedAt ?? '')
+                    );
+                    return tr;
+                }
+            ));
+        } else {
+            const empty = createElement('div', 'empty-state');
+            empty.append(createElement('strong', null, 'Brak danych z telefonów'), createElement('p', null, 'Widok per urządzenie uzupełni się po pierwszych skanach tej dostawy.'));
+            body.appendChild(empty);
         }
-        if (dashboardScannedTotal) {
-            dashboardScannedTotal.textContent = `Zeskanowane: ${formatGroupedTotals(scannedTotals)}`;
-            setVisible(dashboardScannedTotal, !totalsAreZero(scannedTotals));
-        }
-        if (dashboardDifferenceTotal) {
-            dashboardDifferenceTotal.textContent = formatDashboardDifferenceLabel(differenceTotals);
-            setVisible(dashboardDifferenceTotal, !totalsAreZero(differenceTotals));
-        }
+
+        details.append(summary, body);
+        return details;
     }
 
-    function updateDashboardView(payload) {
-        const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-        const devices = Array.isArray(payload?.devices) ? payload.devices : [];
-
-        renderDashboardRows(rows);
-        renderDeviceRows(devices);
-        updateDashboardSummary(rows);
-
-        setVisible(dashboardTableShell, rows.length > 0);
-        setVisible(dashboardEmptyState, rows.length === 0);
-        setVisible(deviceTableShell, devices.length > 0);
-        setVisible(deviceEmptyState, devices.length === 0);
-
-        if (deviceRowCount) {
-            deviceRowCount.textContent = `${devices.length} wpisow`;
-        }
-    }
-
-    async function refreshDashboard() {
-        if (dashboardRefreshInFlight || document.hidden) {
+    function renderMonitors(monitors) {
+        if (!deliveryMonitorList) {
             return;
         }
 
-        dashboardRefreshInFlight = true;
+        const openDeliveryIds = new Set(Array.from(deliveryMonitorList.querySelectorAll('.delivery-monitor[open]'))
+            .map(element => element.dataset.deliveryId)
+            .filter(Boolean));
+
+        deliveryMonitorList.replaceChildren();
+        for (const monitor of monitors) {
+            deliveryMonitorList.appendChild(renderMonitor(monitor, openDeliveryIds));
+        }
+
+        setVisible(deliveryMonitorList, monitors.length > 0);
+        setVisible(deliveryMonitorEmpty, monitors.length === 0);
+    }
+
+    async function refreshMonitors() {
+        if (monitorRefreshInFlight || document.hidden) {
+            return;
+        }
+
+        monitorRefreshInFlight = true;
         try {
-            const response = await fetch('/api/dashboard', {
-                headers: {
-                    'Accept': 'application/json'
-                },
+            const response = await fetch('/api/deliveries/monitors', {
+                headers: {'Accept': 'application/json'},
                 cache: 'no-store'
             });
-
             if (!response.ok) {
                 return;
             }
-
-            const payload = await response.json();
-            updateDashboardView(payload);
+            const monitors = await response.json();
+            renderMonitors(Array.isArray(monitors) ? monitors : []);
         } catch (error) {
-            console.warn('Nie udalo sie odswiezyc dashboardu', error);
+            console.warn('Nie udalo sie odswiezyc monitorowania dostaw', error);
         } finally {
-            dashboardRefreshInFlight = false;
+            monitorRefreshInFlight = false;
         }
     }
 
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-            refreshDashboard();
+            refreshMonitors();
         }
     });
 
-    window.setTimeout(refreshDashboard, 1500);
-    window.setInterval(refreshDashboard, dashboardPollIntervalMs);
+    window.setTimeout(refreshMonitors, 1500);
+    window.setInterval(refreshMonitors, monitorPollIntervalMs);
 
     const mobileApiToken = document.getElementById('mobile-api-token');
     const mobileApiTokenToggle = document.getElementById('mobile-api-token-toggle');

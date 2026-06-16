@@ -65,6 +65,56 @@ public class DeliveryRepository {
         return findSingleByStatus(DeliveryStatus.ACTIVE);
     }
 
+    public List<DeliveryRecord> findActiveDeliveries() {
+        List<DeliveryRecord> rows = jdbcClient.sql("""
+                select id, source_file_name, status, created_at, activated_at
+                from delivery
+                where status = ?
+                order by activated_at desc
+                """)
+                .param(DeliveryStatus.ACTIVE)
+                .query((rs, rowNum) -> new DeliveryRecord(
+                        rs.getString("id"),
+                        rs.getString("source_file_name"),
+                        rs.getString("status"),
+                        Instant.parse(rs.getString("created_at")),
+                        parseNullableInstant(rs.getString("activated_at")),
+                        List.of()
+                ))
+                .list();
+
+        return rows.stream()
+                .map(row -> new DeliveryRecord(
+                        row.id(),
+                        row.sourceFileName(),
+                        row.status(),
+                        row.createdAt(),
+                        row.activatedAt(),
+                        findItems(row.id())
+                ))
+                .toList();
+    }
+
+    public List<DeliveryBarcodeMatchResponse> findActiveDeliveriesContainingBarcode(String barcode) {
+        return jdbcClient.sql("""
+                select d.id as delivery_id, d.source_file_name, di.barcode, di.name, di.expected_qty, di.unit
+                from delivery d
+                join delivery_item di on di.delivery_id = d.id
+                where d.status = ? and di.barcode = ?
+                order by coalesce(d.activated_at, d.created_at) desc
+                """)
+                .params(DeliveryStatus.ACTIVE, barcode)
+                .query((rs, rowNum) -> new DeliveryBarcodeMatchResponse(
+                        rs.getString("delivery_id"),
+                        rs.getString("source_file_name"),
+                        rs.getString("barcode"),
+                        rs.getString("name"),
+                        rs.getInt("expected_qty"),
+                        rs.getString("unit")
+                ))
+                .list();
+    }
+
     public Optional<DeliveryRecord> findById(String id) {
         List<DeliveryRecord> rows = jdbcClient.sql("""
                 select id, source_file_name, status, created_at, activated_at

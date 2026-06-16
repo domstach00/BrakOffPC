@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 class DeliveryServiceTest {
 
     @Test
-    void replacesIncompleteActiveDeliveryWithStatusReplaced() {
+    void keepsIncompleteActiveDeliveryWhenActivatingAnotherDelivery() {
         DeliveryRepository repository = mock(DeliveryRepository.class);
         DeliveryService service = new DeliveryService(repository);
         DeliveryRecord activeDelivery = new DeliveryRecord(
@@ -43,14 +43,14 @@ class DeliveryServiceTest {
 
         service.activate(draft, List.of(new ImportDraftItem(1, "222", "Produkt B", 2)));
 
-        verify(repository).updateStatus("delivery-old", "REPLACED");
+        verify(repository, never()).updateStatus(any(), any());
         verify(repository).save(argThat(delivery ->
                 delivery.sourceFileName().equals("new.pdf") && delivery.status().equals("ACTIVE")
         ));
     }
 
     @Test
-    void replacesCompletedActiveDeliveryWithStatusFinished() {
+    void keepsCompletedActiveDeliveryWhenActivatingAnotherDelivery() {
         DeliveryRepository repository = mock(DeliveryRepository.class);
         DeliveryService service = new DeliveryService(repository);
         DeliveryRecord activeDelivery = new DeliveryRecord(
@@ -70,7 +70,10 @@ class DeliveryServiceTest {
 
         service.activate(draft, List.of(new ImportDraftItem(1, "222", "Produkt B", 2)));
 
-        verify(repository).updateStatus("delivery-old", "FINISHED");
+        verify(repository, never()).updateStatus(any(), any());
+        verify(repository).save(argThat(delivery ->
+                delivery.sourceFileName().equals("new.pdf") && delivery.status().equals("ACTIVE")
+        ));
     }
 
     @Test
@@ -244,6 +247,34 @@ class DeliveryServiceTest {
         assertEquals("999", unordered.barcode());
         assertEquals("Produkt X", unordered.name());
         assertEquals(-2, unordered.difference());
+    }
+
+    @Test
+    void rejectsScanOutsideSelectedDeliveryWhenBarcodeBelongsToAnotherActiveDelivery() {
+        DeliveryRepository repository = mock(DeliveryRepository.class);
+        DeliveryService service = new DeliveryService(repository);
+        DeliveryRecord selectedDelivery = new DeliveryRecord(
+                "delivery-1",
+                "selected.pdf",
+                "ACTIVE",
+                Instant.now(),
+                Instant.now(),
+                List.of(new DeliveryItem("delivery-1", "111", "Produkt A", 5))
+        );
+        Instant updatedAt = Instant.parse("2026-04-22T08:00:00Z");
+
+        when(repository.findById("delivery-1")).thenReturn(Optional.of(selectedDelivery));
+        when(repository.findActiveDeliveriesContainingBarcode("222")).thenReturn(List.of(
+                new DeliveryBarcodeMatchResponse("delivery-2", "other.pdf", "222", "Produkt B", 3, "szt")
+        ));
+
+        ScanUpdateResult result = service.applyScanUpdate(request("delivery-1", "device-1", "222", 1, 1, updatedAt));
+
+        assertFalse(result.accepted());
+        assertEquals("ITEM_BELONGS_TO_OTHER_DELIVERY", result.reason());
+        assertEquals(1, result.suggestedDeliveries().size());
+        assertEquals("delivery-2", result.suggestedDeliveries().getFirst().deliveryId());
+        verify(repository, never()).upsertScan(any(), any());
     }
 
     @Test
@@ -485,10 +516,26 @@ class DeliveryServiceTest {
     }
 
     @Test
-    void rejectsContinuingArchivedDeliveryWhenAnotherDeliveryIsActive() {
+    void continuesArchivedDeliveryWhenAnotherDeliveryIsActive() {
         DeliveryRepository repository = mock(DeliveryRepository.class);
         DeliveryService service = new DeliveryService(repository);
-        DeliveryRecord activeDelivery = new DeliveryRecord(
+        DeliveryRecord archivedDelivery = new DeliveryRecord(
+                "delivery-1",
+                "source.pdf",
+                "ARCHIVED",
+                Instant.parse("2026-04-20T08:00:00Z"),
+                Instant.parse("2026-04-20T08:00:00Z"),
+                List.of(new DeliveryItem("delivery-1", "111", "Produkt A", 5))
+        );
+        DeliveryRecord activatedDelivery = new DeliveryRecord(
+                "delivery-1",
+                "source.pdf",
+                "ACTIVE",
+                archivedDelivery.createdAt(),
+                Instant.parse("2026-04-23T08:00:00Z"),
+                archivedDelivery.items()
+        );
+        DeliveryRecord otherActiveDelivery = new DeliveryRecord(
                 "delivery-active",
                 "source.pdf",
                 "ACTIVE",
@@ -497,13 +544,13 @@ class DeliveryServiceTest {
                 List.of()
         );
 
-        when(repository.findActive()).thenReturn(Optional.of(activeDelivery));
+        when(repository.findActive()).thenReturn(Optional.of(otherActiveDelivery));
+        when(repository.findById("delivery-1")).thenReturn(Optional.of(archivedDelivery), Optional.of(activatedDelivery));
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> service.continueArchivedDelivery("delivery-1"));
+        DeliveryRecord result = service.continueArchivedDelivery("delivery-1");
 
-        assertEquals("Najpierw zakończ lub usuń aktywną dostawę.", exception.getMessage());
-        verify(repository, never()).activateArchived(eq("delivery-1"), any(Instant.class));
+        assertEquals("ACTIVE", result.status());
+        verify(repository).activateArchived(eq("delivery-1"), any(Instant.class));
     }
 
     @Test

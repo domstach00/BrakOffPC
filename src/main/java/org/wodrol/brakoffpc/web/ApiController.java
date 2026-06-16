@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.wodrol.brakoffpc.delivery.ActiveDeliveryResponse;
 import org.wodrol.brakoffpc.delivery.CurrentDeliveryResponse;
+import org.wodrol.brakoffpc.delivery.DeliveryMonitorResponse;
 import org.wodrol.brakoffpc.delivery.DeliveryService;
 import org.wodrol.brakoffpc.delivery.DeviceStateResponse;
 import org.wodrol.brakoffpc.delivery.ScanUpdateRequest;
@@ -43,6 +45,23 @@ public class ApiController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/deliveries/active")
+    public List<ActiveDeliveryResponse> getActiveDeliveries() {
+        return deliveryService.getActiveDeliveryResponses();
+    }
+
+    @GetMapping("/deliveries/monitors")
+    public List<DeliveryMonitorResponse> getActiveDeliveryMonitors() {
+        return deliveryService.getActiveDeliveryMonitorResponses();
+    }
+
+    @GetMapping("/deliveries/{deliveryId}")
+    public ResponseEntity<CurrentDeliveryResponse> getDelivery(@PathVariable String deliveryId) {
+        return deliveryService.getCurrentDeliveryResponse(deliveryId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/active-delivery")
     public ResponseEntity<CurrentDeliveryResponse> getActiveDelivery() {
         return getCurrentDelivery();
@@ -66,6 +85,18 @@ public class ApiController {
         return ResponseEntity.ok(deliveryService.getDeviceState(deviceId));
     }
 
+    @GetMapping("/deliveries/{deliveryId}/device-state/{deviceId}")
+    public ResponseEntity<List<DeviceStateResponse>> getDeviceState(
+            @PathVariable String deliveryId,
+            @PathVariable String deviceId
+    ) {
+        if (deliveryService.getActiveDelivery(deliveryId).isEmpty()) {
+            log.warn("Zadanie stanu urzadzenia bez aktywnej dostawy deliveryId={} deviceId={}", deliveryId, deviceId);
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(deliveryService.getDeviceState(deliveryId, deviceId));
+    }
+
     @PostMapping("/device-state")
     public ResponseEntity<ScanUpdateResult> updateDeviceState(@Valid @RequestBody ScanUpdateRequest request) {
         ScanUpdateResult result = deliveryService.applyScanUpdate(request);
@@ -87,6 +118,15 @@ public class ApiController {
         log.info("Przyjeto update skanu deviceId={} barcode={} serverQuantity={} unchanged={}",
                 request.getDeviceId(), request.getBarcode(), result.serverQuantity(), result.unchanged());
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/deliveries/{deliveryId}/device-state")
+    public ResponseEntity<ScanUpdateResult> updateDeviceState(
+            @PathVariable String deliveryId,
+            @Valid @RequestBody ScanUpdateRequest request
+    ) {
+        request.setDeliveryId(deliveryId);
+        return updateDeviceState(request);
     }
 
     @PostMapping("/active-delivery/scans")

@@ -26,8 +26,10 @@ import org.wodrol.brakoffpc.delivery.DashboardRow;
 import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentForm;
 import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRow;
 import org.wodrol.brakoffpc.delivery.DeliveryAdjustmentRowInput;
+import org.wodrol.brakoffpc.delivery.DeliveryRecord;
 import org.wodrol.brakoffpc.delivery.DeliveryService;
 import org.wodrol.brakoffpc.delivery.DeliveryStatus;
+import org.wodrol.brakoffpc.delivery.DeviceSummaryRow;
 import org.wodrol.brakoffpc.imports.ImportDraft;
 import org.wodrol.brakoffpc.imports.ImportDraftItem;
 import org.wodrol.brakoffpc.imports.ImportRowForm;
@@ -79,6 +81,9 @@ public class HomeController {
             @ModelAttribute("error") String error
     ) {
         List<DashboardRow> dashboardRows = deliveryService.getDashboardRows();
+        List<DeliveryRecord> activeDeliveries = deliveryService.getActiveDeliveries();
+        model.addAttribute("activeDeliveries", activeDeliveries);
+        model.addAttribute("activeDeliveryMonitors", buildActiveDeliveryMonitors(activeDeliveries));
         model.addAttribute("activeDelivery", deliveryService.getActiveDelivery().orElse(null));
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRows());
@@ -89,6 +94,29 @@ public class HomeController {
         populateStartupSettings(model);
         populateDashboardSummary(model, dashboardRows);
         return "index";
+    }
+
+    private List<ActiveDeliveryMonitor> buildActiveDeliveryMonitors(List<DeliveryRecord> activeDeliveries) {
+        return activeDeliveries.stream()
+                .map(delivery -> {
+                    List<DashboardRow> rows = deliveryService.getDashboardRows(delivery.id());
+                    List<org.wodrol.brakoffpc.delivery.DeviceSummaryRow> deviceRows = deliveryService.getDeviceRowsForDelivery(delivery.id());
+                    Map<String, Integer> expectedTotals = groupDashboardTotals(rows, DashboardRow::expectedQty);
+                    Map<String, Integer> scannedTotals = groupDashboardTotals(rows, DashboardRow::scannedQty);
+                    Map<String, Integer> differenceTotals = groupDashboardTotals(rows, DashboardRow::difference);
+                    return new ActiveDeliveryMonitor(
+                            delivery,
+                            rows,
+                            deviceRows,
+                            rows.size(),
+                            formatQuantityTotals(expectedTotals),
+                            formatQuantityTotals(scannedTotals),
+                            totalsAreZero(scannedTotals),
+                            totalsAreZero(differenceTotals),
+                            formatDashboardDifferenceLabel(differenceTotals)
+                    );
+                })
+                .toList();
     }
 
     @PostMapping("/settings/startup")
@@ -120,7 +148,6 @@ public class HomeController {
             @ModelAttribute("error") String error
     ) {
         model.addAttribute("deliveries", deliveryService.getArchivedDeliveries());
-        model.addAttribute("hasActiveDelivery", deliveryService.getActiveDelivery().isPresent());
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         return "delivery-archive";
@@ -142,9 +169,39 @@ public class HomeController {
 
         List<DashboardRow> dashboardRows = deliveryService.getDashboardRows(id);
         model.addAttribute("delivery", delivery.get());
+        model.addAttribute("activeDeliveryDetails", false);
+        model.addAttribute("deliveryStatusDescription", DeliveryStatus.description(delivery.get().status()));
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRowsForDelivery(id));
-        model.addAttribute("hasActiveDelivery", deliveryService.getActiveDelivery().isPresent());
+        model.addAttribute("message", message);
+        model.addAttribute("error", error);
+        populateDashboardSummary(model, dashboardRows);
+        return "delivery-archive-details";
+    }
+
+    @GetMapping("/deliveries/{id}")
+    public String deliveryDetails(
+            @PathVariable String id,
+            Model model,
+            RedirectAttributes redirectAttributes,
+            @ModelAttribute("message") String message,
+            @ModelAttribute("error") String error
+    ) {
+        var delivery = deliveryService.getDelivery(id);
+        if (delivery.isEmpty()) {
+            redirectAttributes.addFlashAttribute("error", "Nie znaleziono dostawy.");
+            return "redirect:/";
+        }
+        if (!DeliveryStatus.ACTIVE.equals(delivery.get().status())) {
+            return "redirect:/deliveries/archive/" + id;
+        }
+
+        List<DashboardRow> dashboardRows = deliveryService.getDashboardRows(id);
+        model.addAttribute("delivery", delivery.get());
+        model.addAttribute("activeDeliveryDetails", true);
+        model.addAttribute("deliveryStatusDescription", DeliveryStatus.description(delivery.get().status()));
+        model.addAttribute("dashboardRows", dashboardRows);
+        model.addAttribute("deviceRows", deliveryService.getDeviceRowsForDelivery(id));
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateDashboardSummary(model, dashboardRows);
@@ -178,6 +235,43 @@ public class HomeController {
                 "Zmieniaj nazwę i oczekiwaną ilość bez przerywania pracy dostawy.",
                 "Możesz też zmienić barcode albo dodać nowy rekord. Usunięcie wiersza usuwa produkt z aktywnej dostawy oraz jego skany z raportu końcowego.",
                 "Po zapisaniu dashboard, raport i lista urządzeń będą przeliczone na nowo.",
+                message,
+                error
+        );
+        return "delivery-edit";
+    }
+
+    @GetMapping("/deliveries/{id}/edit")
+    public String editDelivery(
+            @PathVariable String id,
+            Model model,
+            RedirectAttributes redirectAttributes,
+            @ModelAttribute("message") String message,
+            @ModelAttribute("error") String error
+    ) {
+        var delivery = deliveryService.getDelivery(id);
+        if (delivery.isEmpty()) {
+            redirectAttributes.addFlashAttribute("error", "Nie znaleziono dostawy do edycji.");
+            return "redirect:/";
+        }
+        if (!DeliveryStatus.ACTIVE.equals(delivery.get().status())) {
+            return "redirect:/deliveries/archive/" + id + "/edit";
+        }
+
+        List<DashboardRow> dashboardRows = deliveryService.getDashboardRows(id);
+        populateDeliveryEditModel(
+                model,
+                delivery.get(),
+                dashboardRows,
+                "/deliveries/" + id + "/adjust",
+                "/deliveries/" + id,
+                "Korekta aktywnej dostawy",
+                "Popraw nazwę i oczekiwaną ilość dla produktów tej aktywnej dostawy. Dotyczy to też pozycji, które wcześniej były poza listą.",
+                "Produkty aktywnej dostawy",
+                "Powrót do dostawy",
+                "Zmieniaj dane bez przerywania pracy pozostałych dostaw.",
+                "Możesz też zmienić barcode albo dodać nowy rekord. Usunięcie wiersza usuwa produkt z tej dostawy oraz jego skany z raportu końcowego.",
+                "Po zapisaniu dashboard, raport i lista urządzeń tej dostawy będą przeliczone na nowo.",
                 message,
                 error
         );
@@ -326,6 +420,14 @@ public class HomeController {
         return "redirect:/";
     }
 
+    @PostMapping("/deliveries/{id}/close")
+    public String closeDelivery(@PathVariable String id, RedirectAttributes redirectAttributes) {
+        deliveryService.closeDelivery(id);
+        log.info("Uzytkownik zakonczyl aktywna dostawe id={}", id);
+        redirectAttributes.addFlashAttribute("message", "Aktywna dostawa została zakończona.");
+        return "redirect:/";
+    }
+
     @PostMapping("/deliveries/adjust")
     public String adjustDelivery(
             @ModelAttribute("deliveryAdjustmentForm") DeliveryAdjustmentForm form,
@@ -340,6 +442,24 @@ public class HomeController {
             log.warn("Nie udało się zapisać ręcznej korekty dostawy powod={}", exception.getMessage());
             redirectAttributes.addFlashAttribute("error", exception.getMessage());
             return "redirect:/deliveries/edit";
+        }
+    }
+
+    @PostMapping("/deliveries/{id}/adjust")
+    public String adjustDelivery(
+            @PathVariable String id,
+            @ModelAttribute("deliveryAdjustmentForm") DeliveryAdjustmentForm form,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            List<DeliveryAdjustmentRow> rows = sanitizeAdjustmentRows(form);
+            deliveryService.applyManualCorrections(id, rows);
+            redirectAttributes.addFlashAttribute("message", "Zapisano ręczną korektę aktywnej dostawy.");
+            return "redirect:/deliveries/" + id;
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            log.warn("Nie udało się zapisać ręcznej korekty dostawy id={} powod={}", id, exception.getMessage());
+            redirectAttributes.addFlashAttribute("error", exception.getMessage());
+            return "redirect:/deliveries/" + id + "/edit";
         }
     }
 
@@ -396,6 +516,20 @@ public class HomeController {
                 .orElse("raport-dostawy.pdf");
         byte[] content = deliveryService.generateReportPdf();
         log.info("Wygenerowano raport PDF plik={} rozmiarBajtow={}", reportFileName, content.length);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(reportFileName).build().toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(content);
+    }
+
+    @GetMapping("/deliveries/{id}/report.pdf")
+    public ResponseEntity<byte[]> downloadReport(@PathVariable String id) {
+        var delivery = deliveryService.getDelivery(id)
+                .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do raportu."));
+        String reportFileName = "raport-dostawy-" + sanitizeReportFileName(delivery.sourceFileName()) + ".pdf";
+        byte[] content = deliveryService.generateReportPdf(id);
+        log.info("Wygenerowano raport PDF dla dostawy id={} plik={} rozmiarBajtow={}",
+                id, reportFileName, content.length);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(reportFileName).build().toString())
                 .contentType(MediaType.APPLICATION_PDF)
@@ -611,5 +745,18 @@ public class HomeController {
             parts.add(formatQuantityTotals(excess) + " nadmiar");
         }
         return parts.isEmpty() ? "Różnica: 0" : "Różnica: " + String.join(", ", parts);
+    }
+
+    public record ActiveDeliveryMonitor(
+            DeliveryRecord delivery,
+            List<DashboardRow> rows,
+            List<DeviceSummaryRow> deviceRows,
+            int rowCount,
+            String expectedTotal,
+            String scannedTotal,
+            boolean scannedTotalZero,
+            boolean differenceTotalZero,
+            String differenceLabel
+    ) {
     }
 }

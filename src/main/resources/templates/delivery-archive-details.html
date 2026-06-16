@@ -11,22 +11,22 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
     <meta name="theme-color" content="#ffffff">
-    <title>Szczegóły archiwalnej dostawy</title>
+    <title>Szczegóły dostawy</title>
     <link rel="stylesheet" th:href="@{/styles.css}">
 </head>
 <body>
 <main class="page">
     <section class="panel panel-hero review-hero">
         <div class="review-hero-copy">
-            <p class="eyebrow">Archiwum dostawy</p>
+            <p class="eyebrow" th:text="${activeDeliveryDetails ? 'Aktywna dostawa' : 'Archiwum dostawy'}"></p>
             <h1 th:text="${delivery.sourceFileName()}"></h1>
-            <p class="lead">Podgląd zapisanych danych dla wybranej dostawy archiwalnej.</p>
+            <p class="lead" th:text="${activeDeliveryDetails ? 'Podgląd bieżącego stanu wybranej aktywnej dostawy.' : 'Podgląd zapisanych danych dla wybranej dostawy archiwalnej.'}"></p>
         </div>
         <div class="review-summary">
             <div class="stat-card compact">
                 <span class="stat-label">Status</span>
                 <strong class="stat-value"
-                        th:title="${T(org.wodrol.brakoffpc.delivery.DeliveryStatus).description(delivery.status())}"
+                        th:title="${deliveryStatusDescription}"
                         th:text="${delivery.status()}"></strong>
             </div>
             <div class="stat-card compact">
@@ -48,13 +48,18 @@
             <div class="panel-header">
                 <h2>Metadane</h2>
                 <div class="actions">
-                    <a class="button ghost" th:href="@{/deliveries/archive}">Powrót do archiwum</a>
-                    <a class="button ghost" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/report.pdf'}">Pobierz raport</a>
-                    <a class="button ghost" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/edit'}">Edytuj dane</a>
+                    <a class="button ghost" th:href="${activeDeliveryDetails ? '/' : '/deliveries/archive'}" th:text="${activeDeliveryDetails ? 'Powrót do dashboardu' : 'Powrót do archiwum'}"></a>
+                    <a class="button ghost" th:href="${activeDeliveryDetails ? '/deliveries/' + delivery.id() + '/report.pdf' : '/deliveries/archive/' + delivery.id() + '/report.pdf'}">Pobierz raport</a>
+                    <a class="button ghost" th:href="${activeDeliveryDetails ? '/deliveries/' + delivery.id() + '/edit' : '/deliveries/archive/' + delivery.id() + '/edit'}">Edytuj dane</a>
                     <form method="post"
-                          th:if="${!hasActiveDelivery}"
+                          th:if="${!activeDeliveryDetails}"
                           th:action="@{'/deliveries/archive/' + ${delivery.id()} + '/continue'}">
                         <button type="submit" class="secondary">Kontynuuj dostawę</button>
+                    </form>
+                    <form method="post"
+                          th:if="${activeDeliveryDetails}"
+                          th:action="@{'/deliveries/' + ${delivery.id()} + '/close'}">
+                        <button type="submit" class="danger">Zakończ dostawę</button>
                     </form>
                 </div>
             </div>

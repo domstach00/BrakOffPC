@@ -35,7 +35,7 @@ public class SecurityConfig {
                                 "/styles.css",
                                 "/BrakOff-app-qr.png"
                         ).permitAll()
-                        .requestMatchers("/api/dashboard").hasAnyRole("OPERATOR", "MOBILE")
+                        .requestMatchers("/api/dashboard", "/api/deliveries/monitors").hasAnyRole("OPERATOR", "MOBILE")
                         .requestMatchers("/api/**").hasRole("MOBILE")
                         .anyRequest().hasRole("OPERATOR")
                 )

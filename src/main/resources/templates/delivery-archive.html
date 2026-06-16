@@ -85,7 +85,6 @@
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/edit'}">Edytuj</a>
                                     <button type="submit"
                                             class="row-menu-item row-menu-button"
-                                            th:if="${!hasActiveDelivery}"
                                             th:formaction="@{'/deliveries/archive/' + ${delivery.id()} + '/continue'}">
                                         Kontynuuj
                                     </button>

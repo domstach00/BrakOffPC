@@ -14,7 +14,6 @@ import java.time.format.DateTimeParseException;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ScanUpdateRequest {
 
-    @NotBlank
     private String deliveryId;
     @NotBlank
     private String deviceId;

@@ -179,6 +179,83 @@ body::before {
     overflow: visible;
 }
 
+.delivery-monitor-list {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.delivery-monitor {
+    border: 1px solid rgba(16, 32, 51, 0.1);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: var(--shadow-soft);
+}
+
+.delivery-monitor summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.delivery-monitor summary::-webkit-details-marker {
+    display: none;
+}
+
+.delivery-monitor summary::after {
+    content: "+";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.delivery-monitor[open] summary::after {
+    content: "-";
+}
+
+.delivery-monitor-title {
+    display: grid;
+    gap: 4px;
+    min-width: 220px;
+}
+
+.delivery-monitor-title small {
+    color: var(--muted);
+}
+
+.delivery-monitor-summary {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.delivery-monitor-body {
+    display: grid;
+    gap: 18px;
+    padding: 0 18px 18px;
+}
+
+.delivery-monitor-actions {
+    justify-content: flex-start;
+}
+
+.delivery-monitor-subheader {
+    margin-top: 8px;
+}
+
 .panel-header,
 .actions {
     display: flex;

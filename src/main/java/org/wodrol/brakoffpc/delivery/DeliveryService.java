@@ -46,7 +46,6 @@ public class DeliveryService {
 
     @Transactional
     public DeliveryRecord activate(ImportDraft draft, List<ImportDraftItem> items) {
-        closeActiveDeliveryForReplacement();
         String deliveryId = UUID.randomUUID().toString();
         DeliveryRecord delivery = new DeliveryRecord(
                 deliveryId,
@@ -68,25 +67,72 @@ public class DeliveryService {
         return deliveryRepository.findActive();
     }
 
-    public Optional<CurrentDeliveryResponse> getCurrentDeliveryResponse() {
-        return getActiveDelivery().map(delivery -> {
-            Map<String, Integer> scannedQtyByBarcode = new LinkedHashMap<>();
-            for (DeviceScanState scan : deliveryRepository.findScans(delivery.id())) {
-                scannedQtyByBarcode.merge(scan.barcode(), scan.quantity(), Integer::sum);
-            }
+    public List<DeliveryRecord> getActiveDeliveries() {
+        return deliveryRepository.findActiveDeliveries();
+    }
 
-            return new CurrentDeliveryResponse(
-                    delivery.id(),
-                    delivery.items().stream()
-                            .map(item -> new CurrentDeliveryItemResponse(
-                                    item.barcode(),
-                                    item.name(),
-                                    item.expectedQty(),
-                                    item.unit(),
-                                    scannedQtyByBarcode.getOrDefault(item.barcode(), 0)))
-                            .toList()
-            );
-        });
+    public List<ActiveDeliveryResponse> getActiveDeliveryResponses() {
+        return getActiveDeliveries().stream()
+                .map(this::buildActiveDeliveryResponse)
+                .toList();
+    }
+
+    public List<DeliveryMonitorResponse> getActiveDeliveryMonitorResponses() {
+        return getActiveDeliveries().stream()
+                .map(delivery -> new DeliveryMonitorResponse(
+                        buildActiveDeliveryResponse(delivery),
+                        getDashboardRows(delivery.id()),
+                        getDeviceRowsForDelivery(delivery.id())
+                ))
+                .toList();
+    }
+
+    public Optional<CurrentDeliveryResponse> getCurrentDeliveryResponse() {
+        return getActiveDelivery().map(this::buildCurrentDeliveryResponse);
+    }
+
+    public Optional<CurrentDeliveryResponse> getCurrentDeliveryResponse(String deliveryId) {
+        return deliveryRepository.findById(deliveryId)
+                .filter(delivery -> DeliveryStatus.ACTIVE.equals(delivery.status()))
+                .map(this::buildCurrentDeliveryResponse);
+    }
+
+    private CurrentDeliveryResponse buildCurrentDeliveryResponse(DeliveryRecord delivery) {
+        Map<String, Integer> scannedQtyByBarcode = new LinkedHashMap<>();
+        for (DeviceScanState scan : deliveryRepository.findScans(delivery.id())) {
+            scannedQtyByBarcode.merge(scan.barcode(), scan.quantity(), Integer::sum);
+        }
+
+        return new CurrentDeliveryResponse(
+                delivery.id(),
+                delivery.items().stream()
+                        .map(item -> new CurrentDeliveryItemResponse(
+                                item.barcode(),
+                                item.name(),
+                                item.expectedQty(),
+                                item.unit(),
+                                scannedQtyByBarcode.getOrDefault(item.barcode(), 0)))
+                        .toList()
+        );
+    }
+
+    public Optional<DeliveryRecord> getActiveDelivery(String deliveryId) {
+        Optional<DeliveryRecord> delivery = deliveryRepository.findById(deliveryId)
+                .filter(foundDelivery -> DeliveryStatus.ACTIVE.equals(foundDelivery.status()));
+        if (delivery.isPresent()) {
+            return delivery;
+        }
+        return getActiveDelivery()
+                .filter(activeDelivery -> activeDelivery.id().equals(deliveryId));
+    }
+
+    private ActiveDeliveryResponse buildActiveDeliveryResponse(DeliveryRecord delivery) {
+        return new ActiveDeliveryResponse(
+                delivery.id(),
+                delivery.sourceFileName(),
+                formatForMobile(delivery.activatedAt()),
+                delivery.items().size()
+        );
     }
 
     public List<DashboardRow> getDashboardRows() {
@@ -269,10 +315,6 @@ public class DeliveryService {
 
     @Transactional
     public DeliveryRecord continueArchivedDelivery(String deliveryId) {
-        if (deliveryRepository.findActive().isPresent()) {
-            throw new IllegalStateException("Najpierw zakończ lub usuń aktywną dostawę.");
-        }
-
         DeliveryRecord delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new IllegalStateException("Nie znaleziono archiwalnej dostawy."));
         if (DeliveryStatus.ACTIVE.equals(delivery.status())) {
@@ -288,8 +330,14 @@ public class DeliveryService {
     }
 
     public List<DeviceStateResponse> getDeviceState(String deviceId) {
-        Optional<DeliveryRecord> active = deliveryRepository.findActive();
-        if (active.isEmpty()) {
+        return getActiveDelivery()
+                .map(delivery -> getDeviceState(delivery.id(), deviceId))
+                .orElseGet(List::of);
+    }
+
+    public List<DeviceStateResponse> getDeviceState(String deliveryId, String deviceId) {
+        Optional<DeliveryRecord> delivery = getActiveDelivery(deliveryId);
+        if (delivery.isEmpty()) {
             return List.of();
         }
 
@@ -298,15 +346,15 @@ public class DeliveryService {
             return List.of();
         }
 
-        Map<String, DeliveryItem> itemsByBarcode = active.get().items().stream()
+        Map<String, DeliveryItem> itemsByBarcode = delivery.get().items().stream()
                 .collect(java.util.stream.Collectors.toMap(DeliveryItem::barcode, item -> item, (left, right) -> left, LinkedHashMap::new));
 
-        return deliveryRepository.findScans(active.get().id()).stream()
+        return deliveryRepository.findScans(delivery.get().id()).stream()
                 .filter(scan -> scan.deviceId().equals(normalizedDeviceId))
                 .map(scan -> {
                     DeliveryItem deliveryItem = itemsByBarcode.get(scan.barcode());
                     return new DeviceStateResponse(
-                            active.get().id(),
+                            delivery.get().id(),
                             scan.deviceId(),
                             scan.deviceName(),
                             scan.barcode(),
@@ -323,21 +371,27 @@ public class DeliveryService {
 
     @Transactional
     public ScanUpdateResult applyScanUpdate(ScanUpdateRequest request) {
-        Optional<DeliveryRecord> active = deliveryRepository.findActive();
-        if (active.isEmpty()) {
+        Optional<DeliveryRecord> selectedDelivery = resolveScanDelivery(request.getDeliveryId());
+        if (selectedDelivery.isEmpty()) {
             log.warn("Odrzucono skan bez aktywnej dostawy deviceId={} barcode={}",
                     request.getDeviceId(), request.getBarcode());
             return new ScanUpdateResult(false, false, "NO_ACTIVE_DELIVERY", 0);
         }
 
-        String requestedDeliveryId = normalizeDeliveryId(request.getDeliveryId(), active.get().id());
-        if (!active.get().id().equals(requestedDeliveryId)) {
-            log.warn("Odrzucono skan z niezgodnym deliveryId deviceId={} barcode={} requestDeliveryId={} activeDeliveryId={}",
-                    request.getDeviceId(), request.getBarcode(), request.getDeliveryId(), active.get().id());
-            return new ScanUpdateResult(false, false, "DELIVERY_MISMATCH", 0);
+        String normalizedBarcode = request.getBarcode().trim();
+        List<DeliveryBarcodeMatchResponse> matchesInOtherActiveDeliveries = findMatchesInOtherActiveDeliveries(
+                selectedDelivery.get().id(),
+                normalizedBarcode
+        );
+        if (!barcodeBelongsToDelivery(selectedDelivery.get(), normalizedBarcode) && !matchesInOtherActiveDeliveries.isEmpty()) {
+            String reason = matchesInOtherActiveDeliveries.size() == 1
+                    ? "ITEM_BELONGS_TO_OTHER_DELIVERY"
+                    : "ITEM_BELONGS_TO_MULTIPLE_DELIVERIES";
+            log.warn("Odrzucono skan z innej dostawy selectedDeliveryId={} deviceId={} barcode={} dopasowania={}",
+                    selectedDelivery.get().id(), request.getDeviceId(), normalizedBarcode, matchesInOtherActiveDeliveries.size());
+            return new ScanUpdateResult(false, false, reason, 0, matchesInOtherActiveDeliveries);
         }
 
-        String normalizedBarcode = request.getBarcode().trim();
         DeviceScanState incoming = new DeviceScanState(
                 request.getDeviceId().trim(),
                 request.getDeviceName() == null ? null : request.getDeviceName().trim(),
@@ -349,7 +403,7 @@ public class DeliveryService {
         );
 
         Optional<DeviceScanState> existing = deliveryRepository.findScan(
-                active.get().id(),
+                selectedDelivery.get().id(),
                 incoming.deviceId(),
                 incoming.barcode()
         );
@@ -358,37 +412,42 @@ public class DeliveryService {
             DeviceScanState current = existing.get();
             if (isSameState(incoming, current)) {
                 if (metadataChanged(incoming, current)) {
-                    deliveryRepository.upsertScan(active.get().id(), incoming);
+                    deliveryRepository.upsertScan(selectedDelivery.get().id(), incoming);
                     log.info("Zaktualizowano metadane skanu deliveryId={} deviceId={} barcode={} deviceName={}",
-                            active.get().id(), incoming.deviceId(), incoming.barcode(), incoming.deviceName());
+                            selectedDelivery.get().id(), incoming.deviceId(), incoming.barcode(), incoming.deviceName());
                 }
                 log.info("Pominięto duplikat skanu deliveryId={} deviceId={} barcode={} revision={} quantity={}",
-                        active.get().id(), incoming.deviceId(), incoming.barcode(), incoming.revision(), current.quantity());
+                        selectedDelivery.get().id(), incoming.deviceId(), incoming.barcode(), incoming.revision(), current.quantity());
                 return new ScanUpdateResult(true, true, null, current.quantity());
             }
             if (!isNewer(incoming, current)) {
                 log.warn("Odrzucono przestarzały skan deliveryId={} deviceId={} barcode={} incomingRevision={} currentRevision={}",
-                        active.get().id(), incoming.deviceId(), incoming.barcode(), incoming.revision(), current.revision());
+                        selectedDelivery.get().id(), incoming.deviceId(), incoming.barcode(), incoming.revision(), current.revision());
                 return new ScanUpdateResult(false, false, "STALE_REVISION", current.quantity());
             }
         }
 
-        deliveryRepository.upsertScan(active.get().id(), incoming);
+        deliveryRepository.upsertScan(selectedDelivery.get().id(), incoming);
         log.info("Zapisano skan deliveryId={} deviceId={} barcode={} quantity={} revision={}",
-                active.get().id(), incoming.deviceId(), incoming.barcode(), incoming.quantity(), incoming.revision());
+                selectedDelivery.get().id(), incoming.deviceId(), incoming.barcode(), incoming.quantity(), incoming.revision());
         return new ScanUpdateResult(true, false, null, incoming.quantity());
     }
 
     @Transactional
     public void resetActiveDelivery() {
-        Optional<DeliveryRecord> active = deliveryRepository.findActive();
-        if (active.isEmpty()) {
+        getActiveDelivery().ifPresent(delivery -> closeDelivery(delivery.id()));
+    }
+
+    @Transactional
+    public void closeDelivery(String deliveryId) {
+        Optional<DeliveryRecord> delivery = getActiveDelivery(deliveryId);
+        if (delivery.isEmpty()) {
             return;
         }
 
-        String finalStatus = determineFinalStatus(active.get(), false);
-        deliveryRepository.updateStatus(active.get().id(), finalStatus);
-        log.info("Zakończono aktywną dostawę id={} statusKoncowy={}", active.get().id(), finalStatus);
+        String finalStatus = determineFinalStatus(delivery.get(), false);
+        deliveryRepository.updateStatus(delivery.get().id(), finalStatus);
+        log.info("Zakończono aktywną dostawę id={} statusKoncowy={}", delivery.get().id(), finalStatus);
     }
 
     public byte[] generateReportPdf() {
@@ -481,18 +540,6 @@ public class DeliveryService {
     private boolean metadataChanged(DeviceScanState incoming, DeviceScanState existing) {
         return !Objects.equals(normalizeText(incoming.deviceName()), normalizeText(existing.deviceName()))
                 || !Objects.equals(normalizeText(incoming.itemName()), normalizeText(existing.itemName()));
-    }
-
-    private void closeActiveDeliveryForReplacement() {
-        Optional<DeliveryRecord> active = deliveryRepository.findActive();
-        if (active.isEmpty()) {
-            return;
-        }
-
-        String finalStatus = determineFinalStatus(active.get(), true);
-        deliveryRepository.updateStatus(active.get().id(), finalStatus);
-        log.info("Zamknięto aktywną dostawę przed aktywacją kolejnej id={} statusKoncowy={}",
-                active.get().id(), finalStatus);
     }
 
     private String determineFinalStatus(DeliveryRecord delivery, boolean replacedByNewDelivery) {
@@ -624,18 +671,29 @@ public class DeliveryService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private String normalizeDeliveryId(String deliveryId, String activeDeliveryId) {
-        if (deliveryId == null) {
-            return "";
+    private Optional<DeliveryRecord> resolveScanDelivery(String deliveryId) {
+        String normalizedDeliveryId = normalizeText(deliveryId);
+        if (normalizedDeliveryId == null || "default".equalsIgnoreCase(normalizedDeliveryId)) {
+            return getActiveDelivery();
         }
-        String normalized = deliveryId.trim();
-        if (normalized.isEmpty() || "default".equalsIgnoreCase(normalized)) {
-            return activeDeliveryId;
-        }
-        return normalized;
+        return getActiveDelivery(normalizedDeliveryId);
+    }
+
+    private List<DeliveryBarcodeMatchResponse> findMatchesInOtherActiveDeliveries(String selectedDeliveryId, String barcode) {
+        return deliveryRepository.findActiveDeliveriesContainingBarcode(barcode).stream()
+                .filter(match -> !match.deliveryId().equals(selectedDeliveryId))
+                .toList();
+    }
+
+    private boolean barcodeBelongsToDelivery(DeliveryRecord delivery, String barcode) {
+        return delivery.items().stream()
+                .anyMatch(item -> item.barcode().equals(barcode));
     }
 
     private String formatForMobile(Instant timestamp) {
+        if (timestamp == null) {
+            return null;
+        }
         return MOBILE_DATE_FORMAT.format(timestamp);
     }
 }
