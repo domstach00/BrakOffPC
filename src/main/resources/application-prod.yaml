@@ -14,6 +14,7 @@ server:
 
 app:
   public-url: https://brakoff.mpdwodrol.com
+  mobile-config-qr-url: ${BRAKOFF_MOBILE_CONFIG_QR_URL:}
   desktop-settings:
     enabled: false
   security:

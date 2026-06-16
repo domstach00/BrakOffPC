@@ -33,6 +33,7 @@ logging:
 
 app:
   public-url: https://brakoff.mpdwodrol.com
+  mobile-config-qr-url: /brakoff-config-example.png
   desktop-settings:
     enabled: true
   security:

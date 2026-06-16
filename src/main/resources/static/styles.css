@@ -760,7 +760,7 @@ button:disabled {
 
 .network-panel-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 148px;
+    grid-template-columns: 176px minmax(0, 1fr) 176px;
     gap: 18px;
     align-items: start;
 }
@@ -870,6 +870,14 @@ button:disabled {
     box-shadow: var(--shadow-soft);
 }
 
+.download-qr-help {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: center;
+}
+
 .download-qr-label {
     margin: 0;
     color: var(--muted);
@@ -890,8 +898,8 @@ button:disabled {
 
 .download-qr-image img {
     display: block;
-    width: 104px;
-    height: 104px;
+    width: 132px;
+    height: 132px;
 }
 
 .download-qr-link {

@@ -55,6 +55,7 @@ public class HomeController {
     private final String publicUrl;
     private final boolean desktopSettingsEnabled;
     private final String mobileApiToken;
+    private final String mobileConfigQrUrl;
 
     public HomeController(
             PendingImportService pendingImportService,
@@ -63,7 +64,8 @@ public class HomeController {
             WindowsAutoStartService windowsAutoStartService,
             @Value("${app.public-url:https://brakoff.mpdwodrol.com}") String publicUrl,
             @Value("${app.desktop-settings.enabled:true}") boolean desktopSettingsEnabled,
-            @Value("${app.security.mobile.token}") String mobileApiToken
+            @Value("${app.security.mobile.token}") String mobileApiToken,
+            @Value("${app.mobile-config-qr-url:}") String mobileConfigQrUrl
     ) {
         this.pendingImportService = pendingImportService;
         this.deliveryService = deliveryService;
@@ -72,6 +74,7 @@ public class HomeController {
         this.publicUrl = normalizePublicUrl(publicUrl);
         this.desktopSettingsEnabled = desktopSettingsEnabled;
         this.mobileApiToken = mobileApiToken == null ? "" : mobileApiToken.trim();
+        this.mobileConfigQrUrl = normalizeOptionalValue(mobileConfigQrUrl);
     }
 
     @GetMapping("/")
@@ -89,6 +92,7 @@ public class HomeController {
         model.addAttribute("deviceRows", deliveryService.getDeviceRows());
         model.addAttribute("publicServerUrl", publicUrl);
         model.addAttribute("mobileApiToken", mobileApiToken);
+        model.addAttribute("mobileConfigQrUrl", mobileConfigQrUrl);
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateStartupSettings(model);
@@ -755,6 +759,14 @@ public class HomeController {
             return "https://brakoff.mpdwodrol.com";
         }
         return value.trim().replaceAll("/+$", "");
+    }
+
+    private String normalizeOptionalValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private String formatDashboardDifferenceLabel(Map<String, Integer> differenceTotals) {

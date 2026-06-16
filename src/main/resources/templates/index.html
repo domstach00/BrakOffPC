@@ -234,6 +234,21 @@
             </div>
         </div>
         <div class="network-panel-body">
+            <aside class="download-qr-card"
+                   id="config-qr-card"
+                   th:if="${mobileConfigQrUrl != null}">
+                <p class="download-qr-label">Konfiguracja telefonu</p>
+                <a class="download-qr-image"
+                   th:href="${mobileConfigQrUrl}"
+                   target="_blank"
+                   rel="noreferrer"
+                   aria-label="Otwórz kod QR do konfiguracji aplikacji BrakOff">
+                    <img id="config-qr-image"
+                         th:src="${mobileConfigQrUrl}"
+                         alt="Kod QR do wczytania ustawień BrakOff na telefon">
+                </a>
+                <p class="download-qr-help">Telefon może zeskanować ten kod, aby uzupełnić adres serwera i token.</p>
+            </aside>
             <div>
                 <div class="api-list">
                     <div class="api-item">
@@ -309,8 +324,14 @@
     const uploadProgress = document.getElementById('upload-progress');
     const deliveryMonitorList = document.getElementById('delivery-monitor-list');
     const deliveryMonitorEmpty = document.getElementById('delivery-monitor-empty');
+    const configQrCard = document.getElementById('config-qr-card');
+    const configQrImage = document.getElementById('config-qr-image');
     const monitorPollIntervalMs = 5000;
     let monitorRefreshInFlight = false;
+
+    configQrImage?.addEventListener('error', () => {
+        configQrCard?.classList.add('hidden');
+    });
 
     uploadForm?.addEventListener('submit', () => {
         uploadButton.disabled = true;
