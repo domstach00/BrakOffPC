@@ -120,7 +120,9 @@ public class DeliveryRepository {
 
     public List<DeliveryBarcodeMatchResponse> findActiveDeliveriesContainingBarcode(String barcode) {
         return jdbcClient.sql("""
-                select d.id as delivery_id, d.source_file_name, di.barcode, di.name, di.expected_qty, di.unit
+                select d.id as delivery_id, d.source_file_name,
+                       d.supplier_name, d.commercial_document_number, d.warehouse_document_number,
+                       di.barcode, di.name, di.expected_qty, di.unit
                 from delivery d
                 join delivery_item di on di.delivery_id = d.id
                 where d.status = ? and di.barcode = ?
@@ -129,7 +131,16 @@ public class DeliveryRepository {
                 .params(DeliveryStatus.ACTIVE, barcode)
                 .query((rs, rowNum) -> new DeliveryBarcodeMatchResponse(
                         rs.getString("delivery_id"),
+                        deliveryDisplayName(
+                                rs.getString("supplier_name"),
+                                rs.getString("commercial_document_number"),
+                                rs.getString("warehouse_document_number"),
+                                rs.getString("source_file_name")
+                        ),
                         rs.getString("source_file_name"),
+                        rs.getString("supplier_name"),
+                        rs.getString("commercial_document_number"),
+                        rs.getString("warehouse_document_number"),
                         rs.getString("barcode"),
                         rs.getString("name"),
                         rs.getInt("expected_qty"),
@@ -410,5 +421,23 @@ public class DeliveryRepository {
 
     private Instant parseNullableInstant(String value) {
         return value == null ? null : Instant.parse(value);
+    }
+
+    private String deliveryDisplayName(
+            String supplierName,
+            String commercialDocumentNumber,
+            String warehouseDocumentNumber,
+            String sourceFileName
+    ) {
+        if (supplierName != null && !supplierName.isBlank()) {
+            return supplierName;
+        }
+        if (commercialDocumentNumber != null && !commercialDocumentNumber.isBlank()) {
+            return commercialDocumentNumber;
+        }
+        if (warehouseDocumentNumber != null && !warehouseDocumentNumber.isBlank()) {
+            return warehouseDocumentNumber;
+        }
+        return sourceFileName;
     }
 }

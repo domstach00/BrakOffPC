@@ -125,6 +125,7 @@ public class DeliveryService {
 
         return new CurrentDeliveryResponse(
                 delivery.id(),
+                delivery.sourceFileName(),
                 delivery.supplierName(),
                 delivery.commercialDocumentNumber(),
                 delivery.warehouseDocumentNumber(),
