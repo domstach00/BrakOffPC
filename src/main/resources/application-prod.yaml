@@ -14,6 +14,7 @@ server:
 
 app:
   public-url: https://brakoff.mpdwodrol.com
+  # Moze to byc URL aplikacji (/plik.png, https://...) albo sciezka pliku na hoście, np. /var/lib/brakoffpc/mobile-config-qr.png
   mobile-config-qr-url: ${BRAKOFF_MOBILE_CONFIG_QR_URL:}
   desktop-settings:
     enabled: false

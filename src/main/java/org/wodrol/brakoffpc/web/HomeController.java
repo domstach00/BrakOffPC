@@ -42,6 +42,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 
 @Controller
 @RequestMapping
@@ -92,12 +95,30 @@ public class HomeController {
         model.addAttribute("deviceRows", deliveryService.getDeviceRows());
         model.addAttribute("publicServerUrl", publicUrl);
         model.addAttribute("mobileApiToken", mobileApiToken);
-        model.addAttribute("mobileConfigQrUrl", mobileConfigQrUrl);
+        model.addAttribute("mobileConfigQrUrl", resolveMobileConfigQrUrl());
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateStartupSettings(model);
         populateDashboardSummary(model, dashboardRows);
         return "index";
+    }
+
+    @GetMapping("/assets/mobile-config-qr")
+    public ResponseEntity<byte[]> mobileConfigQrImage() throws java.io.IOException {
+        Path imagePath = resolveMobileConfigQrPath();
+        if (imagePath == null || !Files.isRegularFile(imagePath) || !Files.isReadable(imagePath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        MediaType contentType = resolveImageMediaType(imagePath);
+        if (contentType == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(contentType)
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .body(Files.readAllBytes(imagePath));
     }
 
     private List<ActiveDeliveryMonitor> buildActiveDeliveryMonitors(List<DeliveryRecord> activeDeliveries) {
@@ -767,6 +788,64 @@ public class HomeController {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String resolveMobileConfigQrUrl() {
+        if (mobileConfigQrUrl == null) {
+            return null;
+        }
+        if (isExternalUrl(mobileConfigQrUrl) || isAppRelativeUrl(mobileConfigQrUrl)) {
+            return mobileConfigQrUrl;
+        }
+        return "/assets/mobile-config-qr";
+    }
+
+    private Path resolveMobileConfigQrPath() {
+        if (mobileConfigQrUrl == null || isExternalUrl(mobileConfigQrUrl) || isAppRelativeUrl(mobileConfigQrUrl)) {
+            return null;
+        }
+        return Path.of(mobileConfigQrUrl).toAbsolutePath().normalize();
+    }
+
+    private boolean isExternalUrl(String value) {
+        String normalized = value == null ? null : value.trim();
+        if (normalized == null || normalized.isEmpty()) {
+            return false;
+        }
+        String lowerCase = normalized.toLowerCase(Locale.ROOT);
+        return lowerCase.startsWith("http://") || lowerCase.startsWith("https://");
+    }
+
+    private boolean isAppRelativeUrl(String value) {
+        String normalized = value == null ? null : value.trim();
+        if (normalized == null || normalized.isEmpty() || !normalized.startsWith("/")) {
+            return false;
+        }
+        return !Files.exists(Path.of(normalized));
+    }
+
+    private MediaType resolveImageMediaType(Path imagePath) throws java.io.IOException {
+        String probedType = Files.probeContentType(imagePath);
+        if (probedType != null) {
+            try {
+                MediaType parsed = MediaType.parseMediaType(probedType);
+                if ("image".equalsIgnoreCase(parsed.getType())) {
+                    return parsed;
+                }
+            } catch (IllegalArgumentException ignored) {
+                log.warn("Niepoprawny content type dla pliku QR sciezka={} typ={}", imagePath, probedType);
+            }
+        }
+
+        String fileName = imagePath.getFileName() == null ? "" : imagePath.getFileName().toString().toLowerCase(Locale.ROOT);
+        return switch (fileName.substring(Math.max(fileName.lastIndexOf('.'), 0))) {
+            case ".png" -> MediaType.IMAGE_PNG;
+            case ".jpg", ".jpeg" -> MediaType.IMAGE_JPEG;
+            case ".gif" -> MediaType.IMAGE_GIF;
+            case ".webp" -> MediaType.parseMediaType("image/webp");
+            case ".svg" -> MediaType.parseMediaType("image/svg+xml");
+            default -> null;
+        };
     }
 
     private String formatDashboardDifferenceLabel(Map<String, Integer> differenceTotals) {

@@ -33,7 +33,8 @@ public class SecurityConfig {
                                 "/android-chrome-512x512.png",
                                 "/manifest.json",
                                 "/styles.css",
-                                "/BrakOff-app-qr.png"
+                                "/BrakOff-app-qr.png",
+                                "/assets/mobile-config-qr"
                         ).permitAll()
                         .requestMatchers("/api/dashboard", "/api/deliveries/monitors").hasAnyRole("OPERATOR", "MOBILE")
                         .requestMatchers("/api/**").hasRole("MOBILE")
