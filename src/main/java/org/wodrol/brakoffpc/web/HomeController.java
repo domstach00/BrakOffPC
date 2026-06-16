@@ -339,6 +339,9 @@ public class HomeController {
             ImportDraft draft = pendingImportService.get(id);
             List<ValidatedImportRow> rows = pendingImportService.validate(draft);
             ImportRowForm form = new ImportRowForm();
+            form.setSupplierName(draft.supplierName());
+            form.setCommercialDocumentNumber(draft.commercialDocumentNumber());
+            form.setWarehouseDocumentNumber(draft.warehouseDocumentNumber());
             form.setRows(rows.stream().map(row -> {
                 org.wodrol.brakoffpc.imports.ImportRowInput input = new org.wodrol.brakoffpc.imports.ImportRowInput();
                 input.setBarcode(row.barcode());
@@ -395,6 +398,9 @@ public class HomeController {
                 input.setUnit(item.unit());
                 return input;
             }).toList());
+            retryForm.setSupplierName(form.getSupplierName());
+            retryForm.setCommercialDocumentNumber(form.getCommercialDocumentNumber());
+            retryForm.setWarehouseDocumentNumber(form.getWarehouseDocumentNumber());
 
             model.addAttribute("draft", draft);
             model.addAttribute("rows", validatedRows);
@@ -405,7 +411,13 @@ public class HomeController {
             return "import-review";
         }
 
-        deliveryService.activate(draft, sanitized);
+        deliveryService.activate(
+                draft,
+                sanitized,
+                normalize(form.getSupplierName()),
+                normalize(form.getCommercialDocumentNumber()),
+                normalize(form.getWarehouseDocumentNumber())
+        );
         pendingImportService.deleteDraft(id);
         log.info("Zatwierdzono import draftId={} liczbaPozycji={}", id, sanitized.size());
         redirectAttributes.addFlashAttribute("message", "Dostawa zostala aktywowana.");
@@ -435,7 +447,12 @@ public class HomeController {
     ) {
         try {
             List<DeliveryAdjustmentRow> rows = sanitizeAdjustmentRows(form);
-            deliveryService.applyManualCorrections(rows);
+            deliveryService.applyManualCorrections(
+                    rows,
+                    normalize(form.getSupplierName()),
+                    normalize(form.getCommercialDocumentNumber()),
+                    normalize(form.getWarehouseDocumentNumber())
+            );
             redirectAttributes.addFlashAttribute("message", "Zapisano ręczną korektę aktywnej dostawy.");
             return "redirect:/";
         } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -453,7 +470,13 @@ public class HomeController {
     ) {
         try {
             List<DeliveryAdjustmentRow> rows = sanitizeAdjustmentRows(form);
-            deliveryService.applyManualCorrections(id, rows);
+            deliveryService.applyManualCorrections(
+                    id,
+                    rows,
+                    normalize(form.getSupplierName()),
+                    normalize(form.getCommercialDocumentNumber()),
+                    normalize(form.getWarehouseDocumentNumber())
+            );
             redirectAttributes.addFlashAttribute("message", "Zapisano ręczną korektę aktywnej dostawy.");
             return "redirect:/deliveries/" + id;
         } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -471,7 +494,13 @@ public class HomeController {
     ) {
         try {
             List<DeliveryAdjustmentRow> rows = sanitizeAdjustmentRows(form);
-            deliveryService.applyManualCorrections(id, rows);
+            deliveryService.applyManualCorrections(
+                    id,
+                    rows,
+                    normalize(form.getSupplierName()),
+                    normalize(form.getCommercialDocumentNumber()),
+                    normalize(form.getWarehouseDocumentNumber())
+            );
             redirectAttributes.addFlashAttribute("message", "Zapisano ręczną korektę archiwalnej dostawy.");
             return "redirect:/deliveries/archive/" + id;
         } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -565,8 +594,11 @@ public class HomeController {
         return sanitized.isEmpty() ? "plik-zrodlowy" : sanitized;
     }
 
-    private DeliveryAdjustmentForm buildDeliveryAdjustmentForm(List<DashboardRow> dashboardRows) {
+    private DeliveryAdjustmentForm buildDeliveryAdjustmentForm(DeliveryRecord delivery, List<DashboardRow> dashboardRows) {
         DeliveryAdjustmentForm form = new DeliveryAdjustmentForm();
+        form.setSupplierName(delivery.supplierName());
+        form.setCommercialDocumentNumber(delivery.commercialDocumentNumber());
+        form.setWarehouseDocumentNumber(delivery.warehouseDocumentNumber());
         form.setRows(dashboardRows.stream().map(row -> {
             DeliveryAdjustmentRowInput input = new DeliveryAdjustmentRowInput();
             input.setOriginalBarcode(row.barcode());
@@ -597,7 +629,7 @@ public class HomeController {
     ) {
         model.addAttribute("delivery", delivery);
         model.addAttribute("dashboardRows", dashboardRows);
-        model.addAttribute("deliveryAdjustmentForm", buildDeliveryAdjustmentForm(dashboardRows));
+        model.addAttribute("deliveryAdjustmentForm", buildDeliveryAdjustmentForm(delivery, dashboardRows));
         model.addAttribute("submitAction", submitAction);
         model.addAttribute("backHref", backHref);
         model.addAttribute("pageEyebrow", pageEyebrow);

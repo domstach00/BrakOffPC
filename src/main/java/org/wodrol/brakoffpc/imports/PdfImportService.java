@@ -24,6 +24,9 @@ public class PdfImportService {
     private static final Pattern TRAILING_PRICE_PATTERN = Pattern.compile("(?iu)(?:[-|\\u2013\\u2014]+\\s*)?\\d+(?:[,.]\\d{1,2})?\\s*(?:pln|zl|z\\u0142)\\.?\\s*[-|\\u2013\\u2014]*\\s*$");
     private static final Pattern TRAILING_PRICE_COLUMN_PATTERN = Pattern.compile("(?iu)(?:\\s+[-|\\u2013\\u2014]*\\s*)?(?:\\d+(?:[,.]\\d{1,2})\\s*(?:pln|zl|z\\u0142)\\.?|\\d+\\s*(?:pln|zl|z\\u0142)\\.?|\\d+[,.]\\d{1,2})\\s*[-|\\u2013\\u2014]*\\s*$");
     private static final Pattern TRAILING_OCR_SEPARATOR_PATTERN = Pattern.compile("[\\s\\-_|\\u2013\\u2014]+$");
+    private static final Pattern COMMERCIAL_DOCUMENT_PATTERN = Pattern.compile("(?iu)dokument\\s+handlowy\\s*:\\s*(?<number>[A-Z]{1,6}/\\d{1,2}/\\d{4}/\\d+)");
+    private static final Pattern WAREHOUSE_DOCUMENT_PATTERN = Pattern.compile("(?iu)przyj[eę]cie\\s+magazynowe\\s+(?<number>PZ/\\d{1,2}/\\d{4}/\\d+)");
+    private static final Pattern DOCUMENT_NUMBER_PATTERN = Pattern.compile("(?iu)\\b(?<number>[A-Z]{1,6}/\\d{1,2}/\\d{4}/\\d+)\\b");
     private static final List<String> HEADER_MARKERS = List.of("barcode", "kod", "ean", "nazwa", "ilosc", "qty", "quantity");
     private static final List<String> FOOTER_MARKERS = List.of("razem", "suma", "wartosc", "podsumowanie", "signature", "podpis");
     private final PdfOcrService pdfOcrService;
@@ -33,18 +36,23 @@ public class PdfImportService {
     }
 
     public List<ImportDraftItem> extractItems(MultipartFile file) {
+        return extractDeliveryData(file).items();
+    }
+
+    public PdfImportResult extractDeliveryData(MultipartFile file) {
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             String text = extractTextLayer(document);
             List<ImportDraftItem> items = parseLines(text);
-            if (!items.isEmpty() && !shouldFallbackToOcr(text, items)) {
-                return items;
+            PdfImportResult textLayerResult = buildResult(text, items);
+            if (!items.isEmpty() && !shouldFallbackToOcr(text, items) && hasCompleteMetadata(textLayerResult)) {
+                return textLayerResult;
             }
 
             try {
                 String ocrText = pdfOcrService.extractText(document);
                 List<ImportDraftItem> ocrItems = parseLines(ocrText);
                 if (!ocrItems.isEmpty()) {
-                    return ocrItems;
+                    return buildResult(ocrText, ocrItems);
                 }
             } catch (PdfImportException exception) {
                 if (requiresOcrResult(text, items)) {
@@ -53,12 +61,27 @@ public class PdfImportService {
             }
 
             if (!items.isEmpty() && !textLayerLooksCorrupted(text)) {
-                return items;
+                return textLayerResult;
             }
             throw new PdfImportException("Nie znaleziono tabeli dostawy w pliku PDF.");
         } catch (IOException exception) {
             throw new PdfImportException("Nie udalo sie odczytac danych z pliku PDF.", exception);
         }
+    }
+
+    private PdfImportResult buildResult(String text, List<ImportDraftItem> items) {
+        return new PdfImportResult(
+                items,
+                extractSupplierName(text),
+                extractCommercialDocumentNumber(text),
+                extractWarehouseDocumentNumber(text)
+        );
+    }
+
+    private boolean hasCompleteMetadata(PdfImportResult result) {
+        return result.supplierName() != null
+                && result.commercialDocumentNumber() != null
+                && result.warehouseDocumentNumber() != null;
     }
 
     List<ImportDraftItem> parseLines(String text) {
@@ -270,6 +293,93 @@ public class PdfImportService {
                 || normalized.contains("dokument wystawil")
                 || normalized.contains("podpis osoby")
                 || normalized.contains("soneta");
+    }
+
+    String extractSupplierName(String text) {
+        List<String> lines = normalizedLines(text);
+        for (int index = 0; index < lines.size(); index++) {
+            String normalized = normalizeForMatching(lines.get(index));
+            if (!normalized.startsWith("dostawca")) {
+                continue;
+            }
+
+            String sameLineValue = valueAfterColon(lines.get(index));
+            if (isLikelySupplierName(sameLineValue)) {
+                return sameLineValue;
+            }
+
+            for (int nextIndex = index + 1; nextIndex < Math.min(lines.size(), index + 6); nextIndex++) {
+                String candidate = lines.get(nextIndex).trim();
+                if (isLikelySupplierName(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    String extractCommercialDocumentNumber(String text) {
+        Matcher matcher = COMMERCIAL_DOCUMENT_PATTERN.matcher(normalizeWhitespace(text == null ? "" : text));
+        if (matcher.find()) {
+            return matcher.group("number");
+        }
+        return null;
+    }
+
+    String extractWarehouseDocumentNumber(String text) {
+        String normalizedText = normalizeWhitespace(text == null ? "" : text);
+        Matcher explicitMatcher = WAREHOUSE_DOCUMENT_PATTERN.matcher(normalizedText);
+        if (explicitMatcher.find()) {
+            return explicitMatcher.group("number");
+        }
+
+        Matcher documentMatcher = DOCUMENT_NUMBER_PATTERN.matcher(normalizedText);
+        while (documentMatcher.find()) {
+            String number = documentMatcher.group("number");
+            if (number != null && number.toUpperCase(Locale.ROOT).startsWith("PZ/")) {
+                return number;
+            }
+        }
+        return null;
+    }
+
+    private List<String> normalizedLines(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(text.split("\\R"))
+                .map(this::normalizeWhitespace)
+                .filter(line -> !line.isBlank())
+                .toList();
+    }
+
+    private String valueAfterColon(String value) {
+        if (value == null) {
+            return null;
+        }
+        int colonIndex = value.indexOf(':');
+        if (colonIndex < 0 || colonIndex + 1 >= value.length()) {
+            return null;
+        }
+        String normalized = value.substring(colonIndex + 1).trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private boolean isLikelySupplierName(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = normalizeForMatching(value);
+        if (normalized.startsWith("ul.")
+                || normalized.startsWith("nip")
+                || normalized.startsWith("magazyn")
+                || normalized.startsWith("lp.")
+                || normalized.contains("data operacji")
+                || normalized.contains("dokument handlowy")) {
+            return false;
+        }
+        long letters = value.chars().filter(Character::isLetter).count();
+        return letters >= 4;
     }
 
     private boolean shouldFallbackToOcr(String text, List<ImportDraftItem> items) {

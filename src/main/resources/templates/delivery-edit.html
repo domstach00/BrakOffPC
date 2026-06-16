@@ -60,6 +60,20 @@
                     <p class="hint" th:text="${toolbarHint}"></p>
                 </div>
             </div>
+            <div class="form-grid delivery-metadata-form">
+                <label>
+                    <span>Dostawca</span>
+                    <input th:field="*{supplierName}">
+                </label>
+                <label>
+                    <span>Dokument handlowy</span>
+                    <input th:field="*{commercialDocumentNumber}" placeholder="np. ZK/01/2020/000001">
+                </label>
+                <label>
+                    <span>Przyjęcie magazynowe</span>
+                    <input th:field="*{warehouseDocumentNumber}" placeholder="np. PZ/02/2020/000002">
+                </label>
+            </div>
             <div class="table-shell">
                 <table id="delivery-adjustment-table" class="editable-table delivery-adjustment-table">
                     <colgroup>

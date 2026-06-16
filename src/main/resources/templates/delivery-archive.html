@@ -15,7 +15,7 @@
     <link rel="stylesheet" th:href="@{/styles.css}">
 </head>
 <body>
-<main class="page narrow">
+<main class="page archive-page">
     <section class="panel panel-hero review-hero">
         <div class="review-hero-copy">
             <p class="eyebrow">Archiwum</p>
@@ -48,7 +48,7 @@
                     <thead>
                     <tr>
                         <th>Usuń</th>
-                        <th>Plik</th>
+                        <th>Dostawa</th>
                         <th>ID</th>
                         <th>Aktywowana</th>
                         <th>Pozycje</th>
@@ -61,7 +61,16 @@
                         <td data-label="Usuń">
                             <input type="checkbox" name="deliveryIds" th:value="${delivery.id()}">
                         </td>
-                        <td data-label="Plik" th:text="${delivery.sourceFileName()}"></td>
+                        <td data-label="Dostawa">
+                            <div class="archive-delivery-cell">
+                                <strong th:text="${delivery.supplierName() != null ? delivery.supplierName() : delivery.sourceFileName()}"></strong>
+                                <span th:if="${delivery.supplierName() != null}" th:text="${delivery.sourceFileName()}"></span>
+                                <div class="archive-document-pills">
+                                    <span th:text="${'Dok. handlowy: ' + (delivery.commercialDocumentNumber() != null ? delivery.commercialDocumentNumber() : '-')}"></span>
+                                    <span th:text="${'PZ: ' + (delivery.warehouseDocumentNumber() != null ? delivery.warehouseDocumentNumber() : '-')}"></span>
+                                </div>
+                            </div>
+                        </td>
                         <td data-label="ID">
                             <span class="mono"
                                   th:title="${delivery.id()}"

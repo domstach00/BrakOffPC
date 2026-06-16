@@ -136,6 +136,26 @@ class PdfImportServiceTest {
     }
 
     @Test
+    void extractsDeliveryMetadataFromHermesLikeOcrText() {
+        String text = """
+                WODROL Przyjecie magazynowe PZ/05/2026/000160
+                Data i miejsce wystawienia: 20.05.2026, Kielczow
+                Dokument handlowy: ZK/05/2026/000159 z dnia: 20.05.2026
+                Magazyn: Firma
+                Dostawca :
+                HERMES ZALECH SPÓŁKA JAWNA
+                ul. Testowa 1
+                NIP: 1234567890
+                Lp. Kod towaru Nazwa towaru Cena Detaliczna Ilosc jm.
+                1 5900000000001 TEST PRODUKT 4,00 PLN 10 szt
+                """;
+
+        assertEquals("HERMES ZALECH SPÓŁKA JAWNA", pdfImportService.extractSupplierName(text));
+        assertEquals("ZK/05/2026/000159", pdfImportService.extractCommercialDocumentNumber(text));
+        assertEquals("PZ/05/2026/000160", pdfImportService.extractWarehouseDocumentNumber(text));
+    }
+
+    @Test
     void parsesArbitraryMeasurementUnits() {
         String text = """
                 Kod Nazwa Ilosc jm.

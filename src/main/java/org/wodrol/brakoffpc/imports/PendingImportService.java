@@ -31,13 +31,17 @@ public class PendingImportService {
     }
 
     public ImportDraft createFromPdf(MultipartFile file) {
-        List<ImportDraftItem> items = pdfImportService.extractItems(file);
+        PdfImportResult importResult = pdfImportService.extractDeliveryData(file);
+        List<ImportDraftItem> items = importResult.items();
         ImportDraft draft = new ImportDraft(
                 UUID.randomUUID().toString(),
                 file.getOriginalFilename() == null ? "delivery.pdf" : file.getOriginalFilename(),
                 "PENDING",
                 null,
                 Instant.now(),
+                importResult.supplierName(),
+                importResult.commercialDocumentNumber(),
+                importResult.warehouseDocumentNumber(),
                 items
         );
         pendingImportRepository.save(draft);

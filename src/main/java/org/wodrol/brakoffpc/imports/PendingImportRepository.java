@@ -21,10 +21,22 @@ public class PendingImportRepository {
 
     public void save(ImportDraft draft) {
         jdbcClient.sql("""
-                insert into pending_import (id, file_name, status, error_message, created_at)
-                values (?, ?, ?, ?, ?)
+                insert into pending_import (
+                    id, file_name, status, error_message, supplier_name,
+                    commercial_document_number, warehouse_document_number, created_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """)
-                .params(draft.id(), draft.fileName(), draft.status(), draft.errorMessage(), draft.createdAt().toString())
+                .params(
+                        draft.id(),
+                        draft.fileName(),
+                        draft.status(),
+                        draft.errorMessage(),
+                        draft.supplierName(),
+                        draft.commercialDocumentNumber(),
+                        draft.warehouseDocumentNumber(),
+                        draft.createdAt().toString()
+                )
                 .update();
 
         for (ImportDraftItem item : draft.items()) {
@@ -39,7 +51,8 @@ public class PendingImportRepository {
 
     public Optional<ImportDraft> findById(String id) {
         List<ImportDraft> result = jdbcClient.sql("""
-                select id, file_name, status, error_message, created_at
+                select id, file_name, status, error_message, supplier_name,
+                       commercial_document_number, warehouse_document_number, created_at
                 from pending_import
                 where id = ?
                 """)
@@ -58,6 +71,9 @@ public class PendingImportRepository {
                 draft.status(),
                 draft.errorMessage(),
                 draft.createdAt(),
+                draft.supplierName(),
+                draft.commercialDocumentNumber(),
+                draft.warehouseDocumentNumber(),
                 findItems(id)
         ));
     }
@@ -91,6 +107,9 @@ public class PendingImportRepository {
                 rs.getString("status"),
                 rs.getString("error_message"),
                 Instant.parse(rs.getString("created_at")),
+                rs.getString("supplier_name"),
+                rs.getString("commercial_document_number"),
+                rs.getString("warehouse_document_number"),
                 List.of()
         );
     }

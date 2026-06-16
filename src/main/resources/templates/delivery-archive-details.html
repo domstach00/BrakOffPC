@@ -69,6 +69,18 @@
                     <dd th:text="${delivery.id()}"></dd>
                 </div>
                 <div>
+                    <dt>Dostawca</dt>
+                    <dd th:text="${delivery.supplierName() != null ? delivery.supplierName() : '-'}"></dd>
+                </div>
+                <div>
+                    <dt>Dokument handlowy</dt>
+                    <dd th:text="${delivery.commercialDocumentNumber() != null ? delivery.commercialDocumentNumber() : '-'}"></dd>
+                </div>
+                <div>
+                    <dt>Przyjęcie magazynowe</dt>
+                    <dd th:text="${delivery.warehouseDocumentNumber() != null ? delivery.warehouseDocumentNumber() : '-'}"></dd>
+                </div>
+                <div>
                     <dt>Utworzona</dt>
                     <dd th:text="${T(org.wodrol.brakoffpc.web.PolishDateTimeFormatter).format(delivery.createdAt())}"></dd>
                 </div>

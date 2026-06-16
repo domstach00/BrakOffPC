@@ -19,15 +19,21 @@ public class DeliveryRepository {
 
     public void save(DeliveryRecord delivery) {
         jdbcClient.sql("""
-                insert into delivery (id, source_file_name, status, created_at, activated_at)
-                values (?, ?, ?, ?, ?)
+                insert into delivery (
+                    id, source_file_name, status, created_at, activated_at,
+                    supplier_name, commercial_document_number, warehouse_document_number
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """)
                 .params(
                         delivery.id(),
                         delivery.sourceFileName(),
                         delivery.status(),
                         delivery.createdAt().toString(),
-                        delivery.activatedAt() != null ? delivery.activatedAt().toString() : null
+                        delivery.activatedAt() != null ? delivery.activatedAt().toString() : null,
+                        delivery.supplierName(),
+                        delivery.commercialDocumentNumber(),
+                        delivery.warehouseDocumentNumber()
                 )
                 .update();
 
@@ -61,13 +67,24 @@ public class DeliveryRepository {
                 .update();
     }
 
+    public void updateMetadata(String id, String supplierName, String commercialDocumentNumber, String warehouseDocumentNumber) {
+        jdbcClient.sql("""
+                update delivery
+                set supplier_name = ?, commercial_document_number = ?, warehouse_document_number = ?
+                where id = ?
+                """)
+                .params(supplierName, commercialDocumentNumber, warehouseDocumentNumber, id)
+                .update();
+    }
+
     public Optional<DeliveryRecord> findActive() {
         return findSingleByStatus(DeliveryStatus.ACTIVE);
     }
 
     public List<DeliveryRecord> findActiveDeliveries() {
         List<DeliveryRecord> rows = jdbcClient.sql("""
-                select id, source_file_name, status, created_at, activated_at
+                select id, source_file_name, status, created_at, activated_at,
+                       supplier_name, commercial_document_number, warehouse_document_number
                 from delivery
                 where status = ?
                 order by activated_at desc
@@ -79,6 +96,9 @@ public class DeliveryRepository {
                         rs.getString("status"),
                         Instant.parse(rs.getString("created_at")),
                         parseNullableInstant(rs.getString("activated_at")),
+                        rs.getString("supplier_name"),
+                        rs.getString("commercial_document_number"),
+                        rs.getString("warehouse_document_number"),
                         List.of()
                 ))
                 .list();
@@ -90,6 +110,9 @@ public class DeliveryRepository {
                         row.status(),
                         row.createdAt(),
                         row.activatedAt(),
+                        row.supplierName(),
+                        row.commercialDocumentNumber(),
+                        row.warehouseDocumentNumber(),
                         findItems(row.id())
                 ))
                 .toList();
@@ -117,7 +140,8 @@ public class DeliveryRepository {
 
     public Optional<DeliveryRecord> findById(String id) {
         List<DeliveryRecord> rows = jdbcClient.sql("""
-                select id, source_file_name, status, created_at, activated_at
+                select id, source_file_name, status, created_at, activated_at,
+                       supplier_name, commercial_document_number, warehouse_document_number
                 from delivery
                 where id = ?
                 limit 1
@@ -129,6 +153,9 @@ public class DeliveryRepository {
                         rs.getString("status"),
                         Instant.parse(rs.getString("created_at")),
                         parseNullableInstant(rs.getString("activated_at")),
+                        rs.getString("supplier_name"),
+                        rs.getString("commercial_document_number"),
+                        rs.getString("warehouse_document_number"),
                         List.of()
                 ))
                 .list();
@@ -144,6 +171,9 @@ public class DeliveryRepository {
                 row.status(),
                 row.createdAt(),
                 row.activatedAt(),
+                row.supplierName(),
+                row.commercialDocumentNumber(),
+                row.warehouseDocumentNumber(),
                 findItems(row.id())
         ));
     }
@@ -151,11 +181,13 @@ public class DeliveryRepository {
     public List<DeliveryArchiveSummary> findArchived() {
         return jdbcClient.sql("""
                 select d.id, d.source_file_name, d.status, d.created_at, d.activated_at,
+                       d.supplier_name, d.commercial_document_number, d.warehouse_document_number,
                        count(di.id) as item_count
                 from delivery d
                 left join delivery_item di on di.delivery_id = d.id
                 where d.status <> ?
-                group by d.id, d.source_file_name, d.status, d.created_at, d.activated_at
+                group by d.id, d.source_file_name, d.status, d.created_at, d.activated_at,
+                         d.supplier_name, d.commercial_document_number, d.warehouse_document_number
                 order by coalesce(d.activated_at, d.created_at) desc
                 """)
                 .param(DeliveryStatus.ACTIVE)
@@ -165,6 +197,9 @@ public class DeliveryRepository {
                         rs.getString("status"),
                         Instant.parse(rs.getString("created_at")),
                         parseNullableInstant(rs.getString("activated_at")),
+                        rs.getString("supplier_name"),
+                        rs.getString("commercial_document_number"),
+                        rs.getString("warehouse_document_number"),
                         rs.getInt("item_count")
                 ))
                 .list();
@@ -203,7 +238,8 @@ public class DeliveryRepository {
 
     private Optional<DeliveryRecord> findSingleByStatus(String status) {
         List<DeliveryRecord> rows = jdbcClient.sql("""
-                select id, source_file_name, status, created_at, activated_at
+                select id, source_file_name, status, created_at, activated_at,
+                       supplier_name, commercial_document_number, warehouse_document_number
                 from delivery
                 where status = ?
                 order by activated_at desc
@@ -216,6 +252,9 @@ public class DeliveryRepository {
                         rs.getString("status"),
                         Instant.parse(rs.getString("created_at")),
                         parseNullableInstant(rs.getString("activated_at")),
+                        rs.getString("supplier_name"),
+                        rs.getString("commercial_document_number"),
+                        rs.getString("warehouse_document_number"),
                         List.of()
                 ))
                 .list();
@@ -231,6 +270,9 @@ public class DeliveryRepository {
                 row.status(),
                 row.createdAt(),
                 row.activatedAt(),
+                row.supplierName(),
+                row.commercialDocumentNumber(),
+                row.warehouseDocumentNumber(),
                 findItems(row.id())
         ));
     }

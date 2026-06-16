@@ -74,7 +74,13 @@
                         </thead>
                         <tbody>
                         <tr th:each="delivery : ${activeDeliveries}">
-                            <td data-label="Plik" th:text="${delivery.sourceFileName()}"></td>
+                            <td data-label="Plik">
+                                <strong
+                                       th:text="${delivery.supplierName() != null ? delivery.supplierName() : 'Brak dostawcy'}"></strong>
+                                <small class="delivery-meta-inline" th:text="${delivery.sourceFileName()}"></small>
+                                <small class="delivery-meta-inline"
+                                       th:text="${(delivery.commercialDocumentNumber() != null ? delivery.commercialDocumentNumber() : '-') + ' / ' + (delivery.warehouseDocumentNumber() != null ? delivery.warehouseDocumentNumber() : '-')}"></small>
+                            </td>
                             <td data-label="ID">
                                 <span class="mono"
                                       th:title="${delivery.id()}"
@@ -122,10 +128,12 @@
             <details class="delivery-monitor" th:each="monitor : ${activeDeliveryMonitors}" th:attr="data-delivery-id=${monitor.delivery().id()}">
                 <summary>
                     <span class="delivery-monitor-title">
-                        <strong th:text="${monitor.delivery().sourceFileName()}"></strong>
+                        <strong th:if="${monitor.delivery().supplierName() != null}" th:text="${monitor.delivery().supplierName()}"></strong>
                         <small>
                             <span class="mono" th:text="${#strings.length(monitor.delivery().id()) > 6 ? '...' + #strings.substring(monitor.delivery().id(), #strings.length(monitor.delivery().id()) - 6, #strings.length(monitor.delivery().id())) : monitor.delivery().id()}"></span>
                         </small>
+                        <small th:text="${monitor.delivery().sourceFileName()}"></small>
+                        <small th:text="${(monitor.delivery().commercialDocumentNumber() != null ? monitor.delivery().commercialDocumentNumber() : '-') + ' / ' + (monitor.delivery().warehouseDocumentNumber() != null ? monitor.delivery().warehouseDocumentNumber() : '-')}"></small>
                     </span>
                     <span class="delivery-monitor-summary">
                         <span class="count-badge" th:text="${monitor.rowCount() + ' pozycji'}"></span>
@@ -457,6 +465,14 @@
         const small = createElement('small');
         small.appendChild(createElement('span', 'mono', shortId(deliveryId)));
         title.appendChild(small);
+        if (delivery.supplierName) {
+            title.appendChild(createElement('small', null, delivery.supplierName));
+        }
+        title.appendChild(createElement(
+            'small',
+            null,
+            `${delivery.commercialDocumentNumber ?? '-'} / ${delivery.warehouseDocumentNumber ?? '-'}`
+        ));
 
         const expectedTotals = groupQuantityTotals(rows, row => row.expectedQty);
         const scannedTotals = groupQuantityTotals(rows, row => row.scannedQty);

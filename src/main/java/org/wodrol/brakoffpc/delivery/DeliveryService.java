@@ -46,6 +46,23 @@ public class DeliveryService {
 
     @Transactional
     public DeliveryRecord activate(ImportDraft draft, List<ImportDraftItem> items) {
+        return activate(
+                draft,
+                items,
+                draft.supplierName(),
+                draft.commercialDocumentNumber(),
+                draft.warehouseDocumentNumber()
+        );
+    }
+
+    @Transactional
+    public DeliveryRecord activate(
+            ImportDraft draft,
+            List<ImportDraftItem> items,
+            String supplierName,
+            String commercialDocumentNumber,
+            String warehouseDocumentNumber
+    ) {
         String deliveryId = UUID.randomUUID().toString();
         DeliveryRecord delivery = new DeliveryRecord(
                 deliveryId,
@@ -53,6 +70,9 @@ public class DeliveryService {
                 DeliveryStatus.ACTIVE,
                 Instant.now(),
                 Instant.now(),
+                normalizeText(supplierName),
+                normalizeText(commercialDocumentNumber),
+                normalizeText(warehouseDocumentNumber),
                 items.stream()
                         .map(item -> new DeliveryItem(deliveryId, item.barcode(), item.name(), item.expectedQty(), item.unit()))
                         .toList()
@@ -105,6 +125,9 @@ public class DeliveryService {
 
         return new CurrentDeliveryResponse(
                 delivery.id(),
+                delivery.supplierName(),
+                delivery.commercialDocumentNumber(),
+                delivery.warehouseDocumentNumber(),
                 delivery.items().stream()
                         .map(item -> new CurrentDeliveryItemResponse(
                                 item.barcode(),
@@ -131,7 +154,10 @@ public class DeliveryService {
                 delivery.id(),
                 delivery.sourceFileName(),
                 formatForMobile(delivery.activatedAt()),
-                delivery.items().size()
+                delivery.items().size(),
+                delivery.supplierName(),
+                delivery.commercialDocumentNumber(),
+                delivery.warehouseDocumentNumber()
         );
     }
 
@@ -274,7 +300,41 @@ public class DeliveryService {
     }
 
     @Transactional
+    public void applyManualCorrections(
+            List<DeliveryAdjustmentRow> rows,
+            String supplierName,
+            String commercialDocumentNumber,
+            String warehouseDocumentNumber
+    ) {
+        Optional<DeliveryRecord> active = deliveryRepository.findActive();
+        if (active.isEmpty()) {
+            throw new IllegalStateException("Brak aktywnej dostawy.");
+        }
+
+        applyManualCorrections(active.get().id(), rows, supplierName, commercialDocumentNumber, warehouseDocumentNumber);
+    }
+
+    @Transactional
     public void applyManualCorrections(String deliveryId, List<DeliveryAdjustmentRow> rows) {
+        DeliveryRecord delivery = deliveryRepository.findById(deliveryId)
+                .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do edycji."));
+        applyManualCorrections(
+                deliveryId,
+                rows,
+                delivery.supplierName(),
+                delivery.commercialDocumentNumber(),
+                delivery.warehouseDocumentNumber()
+        );
+    }
+
+    @Transactional
+    public void applyManualCorrections(
+            String deliveryId,
+            List<DeliveryAdjustmentRow> rows,
+            String supplierName,
+            String commercialDocumentNumber,
+            String warehouseDocumentNumber
+    ) {
         DeliveryRecord delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do edycji."));
 
@@ -303,6 +363,12 @@ public class DeliveryService {
 
         deliveryRepository.replaceItems(deliveryId, items);
         deliveryRepository.replaceScans(deliveryId, migratedScans);
+        deliveryRepository.updateMetadata(
+                deliveryId,
+                normalizeText(supplierName),
+                normalizeText(commercialDocumentNumber),
+                normalizeText(warehouseDocumentNumber)
+        );
 
         long deletedCount = normalizedRows.stream().filter(DeliveryAdjustmentRow::deleted).count();
         long addedCount = normalizedRows.stream().filter(row -> !row.deleted() && row.originalBarcode() == null).count();
@@ -470,6 +536,9 @@ public class DeliveryService {
             document.add(new Paragraph("Raport dostawy", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16)));
             document.add(new Paragraph("ID wczytanej dostawy: " + delivery.id()));
             document.add(new Paragraph("Plik źródłowy: " + delivery.sourceFileName()));
+            document.add(new Paragraph("Dostawca: " + reportValue(delivery.supplierName())));
+            document.add(new Paragraph("Dokument handlowy: " + reportValue(delivery.commercialDocumentNumber())));
+            document.add(new Paragraph("Przyjęcie magazynowe: " + reportValue(delivery.warehouseDocumentNumber())));
             document.add(new Paragraph("Wygenerowano: " + PolishDateTimeFormatter.timeNow()));
             document.add(new Paragraph(" "));
 
@@ -669,6 +738,11 @@ public class DeliveryService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String reportValue(String value) {
+        String normalized = normalizeText(value);
+        return normalized == null ? "-" : normalized;
     }
 
     private Optional<DeliveryRecord> resolveScanDelivery(String deliveryId) {

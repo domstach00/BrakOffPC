@@ -58,6 +58,20 @@
                     <a class="button ghost" th:href="@{/}">Anuluj</a>
                 </div>
             </div>
+            <div class="form-grid delivery-metadata-form">
+                <label>
+                    <span>Dostawca</span>
+                    <input th:field="*{supplierName}" placeholder="np. HERMES ZALECH SPÓŁKA JAWNA">
+                </label>
+                <label>
+                    <span>Dokument handlowy</span>
+                    <input th:field="*{commercialDocumentNumber}" placeholder="np. ZK/05/2026/000159">
+                </label>
+                <label>
+                    <span>Przyjęcie magazynowe</span>
+                    <input th:field="*{warehouseDocumentNumber}" placeholder="np. PZ/05/2026/000160">
+                </label>
+            </div>
             <div class="table-shell">
             <table id="rows-table" class="editable-table import-review-table">
                 <colgroup>
