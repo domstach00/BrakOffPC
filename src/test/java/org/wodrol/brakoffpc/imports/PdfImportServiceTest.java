@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PdfImportServiceTest {
@@ -205,6 +206,39 @@ class PdfImportServiceTest {
         assertEquals(2, items.size());
         assertEquals("NJB SLOMKI PAPIEROWE 12SZT DOTS", items.get(0).name());
         assertEquals("NJB WIDELCE DREWNIANE 6SZT", items.get(1).name());
+    }
+
+    @Test
+    void ignoresTrailingBarcodeThatWouldOverflowQuantityParsing() {
+        String text = """
+                Kod Nazwa Ilosc
+                1 5900000000001 TEST PRODUKT 4 5901292653248
+                Razem 1
+                """;
+
+        List<ImportDraftItem> items = pdfImportService.parseLines(text);
+
+        assertEquals(1, items.size());
+        assertEquals("5900000000001", items.getFirst().barcode());
+        assertEquals("TEST PRODUKT", items.getFirst().name());
+        assertEquals(4, items.getFirst().expectedQty());
+    }
+
+    @Test
+    void keepsRowAndMarksQuantityMissingWhenValueExceedsIntegerRange() {
+        String text = """
+                Kod Nazwa Ilosc jm.
+                1 5900000000001 TEST PRODUKT 2147483648 szt
+                Razem 1
+                """;
+
+        List<ImportDraftItem> items = pdfImportService.parseLines(text);
+
+        assertEquals(1, items.size());
+        assertEquals("5900000000001", items.getFirst().barcode());
+        assertEquals("TEST PRODUKT", items.getFirst().name());
+        assertNull(items.getFirst().expectedQty());
+        assertEquals("szt", items.getFirst().unit());
     }
 
     @Test

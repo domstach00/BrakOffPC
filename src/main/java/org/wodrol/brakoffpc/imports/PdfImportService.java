@@ -137,55 +137,67 @@ public class PdfImportService {
     private ParsedLine parseCandidateLine(String line) {
         String lineWithoutTrailingPriceColumns = stripTrailingPriceColumns(line);
         Matcher strictMatcher = STRICT_LINE_PATTERN.matcher(lineWithoutTrailingPriceColumns);
+        ParsedLine overflowFallback = null;
         if (strictMatcher.matches()) {
             String normalizedName = normalizeItemName(stripTrailingPrice(strictMatcher.group("name")));
             if (normalizedName == null) {
                 return null;
             }
-            return new ParsedLine(
+            Integer expectedQty = parseExpectedQty(strictMatcher.group("qty"));
+            ParsedLine strictParsedLine = new ParsedLine(
                     normalizeBarcodeToken(strictMatcher.group("barcode")),
                     normalizedName,
-                    Integer.parseInt(strictMatcher.group("qty")),
+                    expectedQty,
                     MeasurementUnit.normalize(strictMatcher.group("unit"))
             );
+            if (expectedQty != null) {
+                return strictParsedLine;
+            }
+            overflowFallback = strictParsedLine;
         }
 
         String[] tokens = lineWithoutTrailingPriceColumns.split(" ");
         if (tokens.length < 3) {
-            return null;
+            return overflowFallback;
         }
 
-        int qtyIndex = findLastQuantityIndex(tokens);
-        if (qtyIndex <= 0) {
-            return null;
+        QuantityCandidate quantityCandidate = findLastQuantityCandidate(tokens);
+        if (quantityCandidate == null || quantityCandidate.index() <= 0) {
+            return overflowFallback;
         }
+        int qtyIndex = quantityCandidate.index();
 
         int barcodeIndex = findBarcodeIndex(tokens, qtyIndex);
         if (barcodeIndex < 0 || barcodeIndex >= qtyIndex) {
-            return null;
+            return overflowFallback;
         }
 
         String barcode = normalizeBarcodeToken(tokens[barcodeIndex]);
         String name = normalizeItemName(stripTrailingPrice(String.join(" ", Arrays.copyOfRange(tokens, barcodeIndex + 1, qtyIndex))));
         if (name == null) {
-            return null;
+            return overflowFallback;
         }
 
-        String quantity = extractDigits(tokens[qtyIndex]);
-        if (quantity == null) {
-            return null;
-        }
-
-        return new ParsedLine(barcode, name, Integer.parseInt(quantity), extractUnit(tokens, qtyIndex));
+        return new ParsedLine(barcode, name, quantityCandidate.expectedQty(), extractUnit(tokens, qtyIndex));
     }
 
-    private int findLastQuantityIndex(String[] tokens) {
+    private QuantityCandidate findLastQuantityCandidate(String[] tokens) {
+        QuantityCandidate overflowCandidate = null;
         for (int index = tokens.length - 1; index >= 0; index--) {
-            if (extractDigits(tokens[index]) != null) {
-                return index;
+            String digits = extractDigits(tokens[index]);
+            if (digits == null || !looksLikeQuantityToken(tokens, index, digits)) {
+                continue;
+            }
+
+            Integer expectedQty = parseExpectedQty(digits);
+            if (expectedQty != null) {
+                return new QuantityCandidate(index, expectedQty);
+            }
+            if (overflowCandidate == null) {
+                overflowCandidate = new QuantityCandidate(index, null);
             }
         }
-        return -1;
+        return overflowCandidate;
     }
 
     private int findBarcodeIndex(String[] tokens, int qtyIndex) {
@@ -212,6 +224,38 @@ public class PdfImportService {
     private String extractDigits(String token) {
         String digits = token.replaceAll("\\D", "");
         return digits.isBlank() ? null : digits;
+    }
+
+    private Integer parseExpectedQty(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(rawValue);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private boolean looksLikeQuantityToken(String[] tokens, int index, String digits) {
+        if (digits.length() < MIN_BARCODE_LENGTH) {
+            return true;
+        }
+
+        String compactToken = extractLettersAndDigits(tokens[index]);
+        if (compactToken.chars().anyMatch(Character::isLetter)) {
+            return true;
+        }
+
+        return index + 1 < tokens.length && looksLikeStandaloneUnitToken(tokens[index + 1]);
+    }
+
+    private boolean looksLikeStandaloneUnitToken(String token) {
+        String normalized = extractLettersAndDigits(token);
+        return !normalized.isBlank()
+                && normalized.length() <= 5
+                && normalized.chars().anyMatch(Character::isLetter)
+                && normalized.chars().noneMatch(Character::isDigit);
     }
 
     private String extractUnit(String[] tokens, int qtyIndex) {
@@ -448,5 +492,8 @@ public class PdfImportService {
     }
 
     private record ParsedLine(String barcode, String name, Integer expectedQty, String unit) {
+    }
+
+    private record QuantityCandidate(int index, Integer expectedQty) {
     }
 }
