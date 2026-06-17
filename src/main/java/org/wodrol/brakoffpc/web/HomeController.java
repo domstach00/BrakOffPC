@@ -777,7 +777,7 @@ public class HomeController {
 
     private String normalizePublicUrl(String value) {
         if (value == null || value.isBlank()) {
-            return "https://brakoff.mpdwodrol.com";
+            return "https://brakoff.mpdwodrol.pl";
         }
         return value.trim().replaceAll("/+$", "");
     }

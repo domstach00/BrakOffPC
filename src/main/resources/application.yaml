@@ -32,7 +32,7 @@ logging:
     org.wodrol.brakoffpc: INFO
 
 app:
-  public-url: https://brakoff.mpdwodrol.com
+  public-url: https://brakoff.mpdwodrol.pl
   mobile-config-qr-url: /brakoff-config-example.png
   desktop-settings:
     enabled: true

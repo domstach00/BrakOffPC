@@ -13,7 +13,7 @@ server:
         max-age: 30d
 
 app:
-  public-url: https://brakoff.mpdwodrol.com
+  public-url: https://brakoff.mpdwodrol.pl
   # Moze to byc URL aplikacji (/plik.png, https://...) albo sciezka pliku na hoście, np. /var/lib/brakoffpc/mobile-config-qr.png
   mobile-config-qr-url: ${BRAKOFF_MOBILE_CONFIG_QR_URL:}
   desktop-settings:
