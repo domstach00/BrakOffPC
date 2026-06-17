@@ -237,7 +237,7 @@
             <aside class="download-qr-card"
                    id="config-qr-card"
                    th:if="${mobileConfigQrUrl != null}">
-                <p class="download-qr-label">Konfiguracja telefonu</p>
+                <p class="download-qr-label">Auto konfiguracja telefonu</p>
                 <a class="download-qr-image"
                    th:href="${mobileConfigQrUrl}"
                    target="_blank"
@@ -247,7 +247,7 @@
                          th:src="${mobileConfigQrUrl}"
                          alt="Kod QR do wczytania ustawień BrakOff na telefon">
                 </a>
-                <p class="download-qr-help">Telefon może zeskanować ten kod, aby uzupełnić adres serwera i token.</p>
+                <p class="download-qr-help">W ustawieniach aplikacji telefon może zeskanować ten kod, aby uzupełnić adres serwera i token automatycznie.</p>
             </aside>
             <div>
                 <div class="api-list">
