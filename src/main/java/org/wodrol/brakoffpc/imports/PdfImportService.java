@@ -21,6 +21,8 @@ public class PdfImportService {
 
     private static final int MIN_BARCODE_LENGTH = 8;
     private static final Pattern STRICT_LINE_PATTERN = Pattern.compile("^(?:\\d+\\s+)?(?<barcode>\\d{" + MIN_BARCODE_LENGTH + ",14})\\s+(?<name>.+?)\\s+(?<qty>\\d+)(?:\\s+(?<unit>(?=[\\p{L}\\p{N}./-]*\\p{L})[\\p{L}\\p{N}./-]+))?\\s*$");
+    private static final Pattern POSITION_SORTED_ROW_PATTERN = Pattern.compile("^(?<lp>\\d{1,4})\\s+(?<barcode>\\d{" + MIN_BARCODE_LENGTH + ",14})\\s+(?<tail>.*)$");
+    private static final Pattern POSITION_SORTED_ROW_TAIL_PATTERN = Pattern.compile("^(?<name>.*?)(?:\\s+(?<price>\\d+(?:[,.]\\d{1,2})\\s*(?:pln|zl|z\\u0142)\\.?))?\\s+(?<qty>\\d+)\\s+(?<unit>(?=[\\p{L}\\p{N}./-]*\\p{L})[\\p{L}\\p{N}./-]+)\\s*$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern TRAILING_PRICE_PATTERN = Pattern.compile("(?iu)(?:[-|\\u2013\\u2014]+\\s*)?\\d+(?:[,.]\\d{1,2})?\\s*(?:pln|zl|z\\u0142)\\.?\\s*[-|\\u2013\\u2014]*\\s*$");
     private static final Pattern TRAILING_PRICE_COLUMN_PATTERN = Pattern.compile("(?iu)(?:\\s+[-|\\u2013\\u2014]*\\s*)?(?:\\d+(?:[,.]\\d{1,2})\\s*(?:pln|zl|z\\u0142)\\.?|\\d+\\s*(?:pln|zl|z\\u0142)\\.?|\\d+[,.]\\d{1,2})\\s*[-|\\u2013\\u2014]*\\s*$");
     private static final Pattern TRAILING_OCR_SEPARATOR_PATTERN = Pattern.compile("[\\s\\-_|\\u2013\\u2014]+$");
@@ -90,6 +92,10 @@ public class PdfImportService {
                 .filter(line -> !line.isBlank())
                 .toList();
         List<String> candidateLines = selectCandidateLines(lines);
+        List<ImportDraftItem> positionSortedItems = parsePositionSortedRows(candidateLines);
+        if (!positionSortedItems.isEmpty()) {
+            return positionSortedItems;
+        }
         List<ImportDraftItem> items = new ArrayList<>();
 
         int rowOrder = 0;
@@ -103,6 +109,232 @@ public class PdfImportService {
             }
         }
         return items;
+    }
+
+    private List<ImportDraftItem> parsePositionSortedRows(List<String> candidateLines) {
+        List<PositionSortedBlock> blocks = new ArrayList<>();
+        PositionSortedBlock currentBlock = null;
+        boolean foundContinuationLine = false;
+
+        for (int index = 0; index < candidateLines.size(); index++) {
+            String line = candidateLines.get(index);
+            PositionSortedBlockStart blockStart = parsePositionSortedBlockStart(line);
+            if (blockStart != null) {
+                List<IndexedFragment> movedPrefixes = currentBlock == null
+                        ? List.of()
+                        : extractTrailingPrefixesForNextBlock(currentBlock, blockStart.initialFragment());
+                currentBlock = new PositionSortedBlock(blockStart.barcode(), new ArrayList<>());
+                currentBlock.fragments().addAll(movedPrefixes);
+                currentBlock.fragments().add(new IndexedFragment(index, blockStart.initialFragment()));
+                blocks.add(currentBlock);
+                continue;
+            }
+            if (currentBlock != null && isLikelyPositionSortedContinuationLine(line)) {
+                currentBlock.fragments().add(new IndexedFragment(index, line));
+                foundContinuationLine = true;
+            }
+        }
+
+        if (blocks.size() < 2 || !foundContinuationLine) {
+            return List.of();
+        }
+
+        List<ImportDraftItem> items = new ArrayList<>();
+        for (PositionSortedBlock block : blocks) {
+            ParsedLine parsedBlock = parsePositionSortedBlock(block);
+            if (parsedBlock == null) {
+                continue;
+            }
+            items.add(new ImportDraftItem(
+                    items.size(),
+                    parsedBlock.barcode(),
+                    parsedBlock.name(),
+                    parsedBlock.expectedQty(),
+                    parsedBlock.unit()
+            ));
+        }
+        return items;
+    }
+
+    private PositionSortedBlockStart parsePositionSortedBlockStart(String line) {
+        Matcher rowMatcher = POSITION_SORTED_ROW_PATTERN.matcher(line);
+        if (!rowMatcher.matches()) {
+            return null;
+        }
+
+        String barcode = normalizeBarcodeToken(rowMatcher.group("barcode"));
+        if (barcode == null) {
+            return null;
+        }
+        return new PositionSortedBlockStart(barcode, rowMatcher.group("tail") == null ? "" : rowMatcher.group("tail").trim());
+    }
+
+    private boolean isLikelyPositionSortedContinuationLine(String line) {
+        if (line == null || line.isBlank() || isDocumentMetadataLine(line)) {
+            return false;
+        }
+
+        String normalized = normalizeForMatching(line);
+        if (HEADER_MARKERS.stream().anyMatch(normalized::contains)
+                || FOOTER_MARKERS.stream().anyMatch(normalized::contains)
+                || normalized.startsWith("jm")
+                || normalized.startsWith("cena detaliczna")
+                || normalized.startsWith("ilosc")
+                || normalized.startsWith("dokument wystawil")
+                || normalized.contains("strona:")
+                || normalized.contains("© soneta")) {
+            return false;
+        }
+
+        if (POSITION_SORTED_ROW_PATTERN.matcher(line).matches()) {
+            return false;
+        }
+
+        if (parseCandidateLine(line) != null) {
+            return false;
+        }
+
+        String compact = extractLettersAndDigits(line);
+        if (compact.isBlank()) {
+            return false;
+        }
+
+        if (TRAILING_PRICE_COLUMN_PATTERN.matcher(line).matches()) {
+            return false;
+        }
+
+        return line.chars().anyMatch(Character::isLetter);
+    }
+
+    private ParsedLine parsePositionSortedBlock(PositionSortedBlock block) {
+        List<IndexedFragment> fragments = block.fragments().stream()
+                .sorted((left, right) -> Integer.compare(left.lineIndex(), right.lineIndex()))
+                .toList();
+
+        int quantityFragmentIndex = -1;
+        Integer expectedQty = null;
+        String unit = null;
+        String[] normalizedFragments = new String[fragments.size()];
+
+        for (int index = fragments.size() - 1; index >= 0; index--) {
+            String text = fragments.get(index).text();
+            Matcher tailMatcher = POSITION_SORTED_ROW_TAIL_PATTERN.matcher(text);
+            if (!tailMatcher.matches()) {
+                normalizedFragments[index] = text;
+                continue;
+            }
+
+            String normalizedUnit = MeasurementUnit.normalize(tailMatcher.group("unit"));
+            String nameFragment = tailMatcher.group("name") == null ? "" : tailMatcher.group("name").trim();
+            if (looksLikeDimensionSplit(nameFragment, normalizedUnit)) {
+                normalizedFragments[index] = text;
+                continue;
+            }
+
+            quantityFragmentIndex = index;
+            expectedQty = parseExpectedQty(tailMatcher.group("qty"));
+            unit = normalizedUnit;
+            normalizedFragments[index] = nameFragment;
+            break;
+        }
+
+        if (quantityFragmentIndex < 0) {
+            return null;
+        }
+
+        for (int index = 0; index < fragments.size(); index++) {
+            if (normalizedFragments[index] == null) {
+                normalizedFragments[index] = fragments.get(index).text();
+            }
+        }
+
+        String combinedName = Arrays.stream(normalizedFragments)
+                .map(this::stripTrailingPrice)
+                .map(String::trim)
+                .filter(fragment -> !fragment.isBlank())
+                .reduce((left, right) -> left + " " + right)
+                .orElse(null);
+        String normalizedName = normalizeItemName(combinedName);
+        if (normalizedName == null) {
+            return null;
+        }
+
+        return new ParsedLine(block.barcode(), normalizedName, expectedQty, unit == null ? MeasurementUnit.DEFAULT_UNIT : unit);
+    }
+
+    private List<IndexedFragment> extractTrailingPrefixesForNextBlock(PositionSortedBlock currentBlock, String nextInitialFragment) {
+        if (!looksLikeIncompleteRowStart(nextInitialFragment)) {
+            return List.of();
+        }
+
+        int quantityFragmentIndex = findLastQuantityFragmentIndex(currentBlock.fragments());
+        if (quantityFragmentIndex < 0 || quantityFragmentIndex >= currentBlock.fragments().size() - 1) {
+            return List.of();
+        }
+
+        List<IndexedFragment> moved = new ArrayList<>();
+        for (int index = currentBlock.fragments().size() - 1; index > quantityFragmentIndex; index--) {
+            IndexedFragment fragment = currentBlock.fragments().get(index);
+            if (!looksLikeNextRowPrefixFragment(fragment.text())) {
+                break;
+            }
+            moved.add(0, fragment);
+            currentBlock.fragments().remove(index);
+        }
+        return moved;
+    }
+
+    private int findLastQuantityFragmentIndex(List<IndexedFragment> fragments) {
+        for (int index = fragments.size() - 1; index >= 0; index--) {
+            if (matchesPositionSortedTail(fragments.get(index).text())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean matchesPositionSortedTail(String text) {
+        Matcher tailMatcher = POSITION_SORTED_ROW_TAIL_PATTERN.matcher(text);
+        if (!tailMatcher.matches()) {
+            return false;
+        }
+        String normalizedUnit = MeasurementUnit.normalize(tailMatcher.group("unit"));
+        String nameFragment = tailMatcher.group("name") == null ? "" : tailMatcher.group("name").trim();
+        return !looksLikeDimensionSplit(nameFragment, normalizedUnit);
+    }
+
+    private boolean looksLikeIncompleteRowStart(String fragment) {
+        if (fragment == null) {
+            return false;
+        }
+        String normalized = fragment.trim();
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        if (normalized.startsWith("+")) {
+            return true;
+        }
+        return countWords(normalized) <= 2 && !matchesPositionSortedTail(normalized);
+    }
+
+    private boolean looksLikeNextRowPrefixFragment(String fragment) {
+        if (fragment == null) {
+            return false;
+        }
+        String normalized = fragment.trim();
+        if (normalized.isEmpty() || matchesPositionSortedTail(normalized)) {
+            return false;
+        }
+        if (normalized.contains("=")) {
+            return false;
+        }
+        return countWords(normalized) >= 1 && normalized.chars().anyMatch(Character::isLetter);
+    }
+
+    private long countWords(String value) {
+        return Arrays.stream(value.trim().split("\\s+"))
+                .filter(token -> !token.isBlank())
+                .count();
     }
 
     private List<String> selectCandidateLines(List<String> lines) {
@@ -143,12 +375,16 @@ public class PdfImportService {
             if (normalizedName == null) {
                 return null;
             }
+            String normalizedUnit = MeasurementUnit.normalize(strictMatcher.group("unit"));
+            if (looksLikeDimensionSplit(strictMatcher.group("name"), normalizedUnit)) {
+                return null;
+            }
             Integer expectedQty = parseExpectedQty(strictMatcher.group("qty"));
             ParsedLine strictParsedLine = new ParsedLine(
                     normalizeBarcodeToken(strictMatcher.group("barcode")),
                     normalizedName,
                     expectedQty,
-                    MeasurementUnit.normalize(strictMatcher.group("unit"))
+                    normalizedUnit
             );
             if (expectedQty != null) {
                 return strictParsedLine;
@@ -238,6 +474,10 @@ public class PdfImportService {
     }
 
     private boolean looksLikeQuantityToken(String[] tokens, int index, String digits) {
+        if (isDimensionContext(tokens, index)) {
+            return false;
+        }
+
         if (digits.length() < MIN_BARCODE_LENGTH) {
             return true;
         }
@@ -253,9 +493,41 @@ public class PdfImportService {
     private boolean looksLikeStandaloneUnitToken(String token) {
         String normalized = extractLettersAndDigits(token);
         return !normalized.isBlank()
+                && !isDimensionSeparatorToken(normalized)
                 && normalized.length() <= 5
                 && normalized.chars().anyMatch(Character::isLetter)
                 && normalized.chars().noneMatch(Character::isDigit);
+    }
+
+    private boolean isDimensionContext(String[] tokens, int index) {
+        return isDimensionSeparatorToken(tokenAt(tokens, index - 1))
+                || isDimensionSeparatorToken(tokenAt(tokens, index + 1));
+    }
+
+    private String tokenAt(String[] tokens, int index) {
+        if (index < 0 || index >= tokens.length) {
+            return null;
+        }
+        return tokens[index];
+    }
+
+    private boolean isDimensionSeparatorToken(String token) {
+        if (token == null) {
+            return false;
+        }
+        String normalized = token.trim().toLowerCase(Locale.ROOT);
+        return "x".equals(normalized) || "×".equals(normalized);
+    }
+
+    private boolean looksLikeDimensionSplit(String rawName, String unit) {
+        if (isDimensionSeparatorToken(unit)) {
+            return true;
+        }
+        if (rawName == null) {
+            return false;
+        }
+        String normalized = rawName.trim().toLowerCase(Locale.ROOT);
+        return normalized.endsWith(" x") || normalized.endsWith(" ×");
     }
 
     private String extractUnit(String[] tokens, int qtyIndex) {
@@ -479,6 +751,7 @@ public class PdfImportService {
 
     private String extractTextLayer(PDDocument document) throws IOException {
         PDFTextStripper stripper = new PDFTextStripper();
+        stripper.setSortByPosition(true);
         return stripper.getText(document);
     }
 
@@ -495,5 +768,14 @@ public class PdfImportService {
     }
 
     private record QuantityCandidate(int index, Integer expectedQty) {
+    }
+
+    private record PositionSortedBlockStart(String barcode, String initialFragment) {
+    }
+
+    private record PositionSortedBlock(String barcode, List<IndexedFragment> fragments) {
+    }
+
+    private record IndexedFragment(int lineIndex, String text) {
     }
 }

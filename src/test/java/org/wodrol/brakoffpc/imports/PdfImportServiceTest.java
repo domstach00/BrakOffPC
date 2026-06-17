@@ -64,6 +64,41 @@ class PdfImportServiceTest {
             Podsumowanie ilosci: 467 szt, 7 kpl
             """;
 
+    private static final String SONETA_LAYOUT_TEXT = """
+            WODROL Przyjęcie magazynowe PZ/06/2026/000065 strona: 2
+            Lp. Kod towaru Nazwa towaru Cena Detaliczna Ilość jm.
+            16 9788382829591 GARNEK 3L KAMIONKA ZIELONY *3446 89,00 PLN 4 szt
+            17 5901292653248 POJEMNIK CERAMICZNY 1,5L NA OGÓRKI ZE
+            SZCZYPCAMI BRĄZ *3248 GTIN: 5901292653248 79,00 PLN 6 szt
+            18 5901292653170 POJEMNIK CERAMICZNY 3,5L NA OGÓRKI ZE
+            SZCZYPCAMI MIODOWY 95,00 PLN 6 szt
+            19 5901292653187 POJEMNIK CERAMICZNY 3,5L NA OGÓRKI ZE
+            SZCZYPCAMI ZIELONY 95,00 PLN 6 szt
+            36 5901292668211 KPL. TURYSTYCZNY (STOLIK + 4 KRZESŁA) 120 x 60 x
+            70 CM 179,00 PLN 1 kpl
+            37 5900779800878 REGAŁ 5-POZIOMOWY 180 x 90 x 40 CM UDŹWIG PÓŁKI:
+            175 KG 99,00 PLN 6 szt
+            ZESTAW DO
+            38 5901292685065 NAWADNIANIA
+            KROPELKOWEGO Z 88,00 PLN 5 szt
+            15SZT. ZRASZACZAMI
+            Suma:
+            Podsumowanie ilości: 228 szt, 27 kpl
+            """;
+
+    private static final String SONETA_PREFIX_SHIFT_TEXT = """
+            Lp. Kod towaru Nazwa towaru Cena Detaliczna Ilość jm.
+            9 9788382829587 SŁÓJ 2,2 L KWADRATOWY Z ZAPIĘCIEM MECHANICZNYM *8438 19,90 PLN 6 szt
+            SŁÓJ 3 L + WIECZKO PL
+            10 5901292611941 + PRZEPIS/SZCZYPCE 19,00 PLN 4 szt
+            ZGRZ=2SZT
+            SŁÓJ 4L(4,250)
+            11 5901292629625 +WIECZKO
+            PLAST+PRZEPIS/SZCZYP 21,00 PLN 4 szt
+            CE ZGRZ=2SZT
+            Razem 3
+            """;
+
     private final PdfImportService pdfImportService = new PdfImportService(document -> "");
 
     @Test
@@ -239,6 +274,78 @@ class PdfImportServiceTest {
         assertEquals("TEST PRODUKT", items.getFirst().name());
         assertNull(items.getFirst().expectedQty());
         assertEquals("szt", items.getFirst().unit());
+    }
+
+    @Test
+    void parsesPositionSortedSonetaLayoutWithMultilineNames() {
+        List<ImportDraftItem> items = pdfImportService.parseLines(SONETA_LAYOUT_TEXT);
+
+        assertEquals(7, items.size());
+        assertEquals("9788382829591", items.get(0).barcode());
+        assertEquals("GARNEK 3L KAMIONKA ZIELONY *3446", items.get(0).name());
+        assertEquals(4, items.get(0).expectedQty());
+
+        assertEquals("5901292653248", items.get(1).barcode());
+        assertEquals("POJEMNIK CERAMICZNY 1,5L NA OGÓRKI ZE SZCZYPCAMI BRĄZ *3248 GTIN: 5901292653248", items.get(1).name());
+        assertEquals(6, items.get(1).expectedQty());
+
+        assertEquals("5901292653170", items.get(2).barcode());
+        assertEquals("POJEMNIK CERAMICZNY 3,5L NA OGÓRKI ZE SZCZYPCAMI MIODOWY", items.get(2).name());
+        assertEquals(6, items.get(2).expectedQty());
+
+        assertEquals("5901292653187", items.get(3).barcode());
+        assertEquals("POJEMNIK CERAMICZNY 3,5L NA OGÓRKI ZE SZCZYPCAMI ZIELONY", items.get(3).name());
+        assertEquals(6, items.get(3).expectedQty());
+
+        assertEquals("5901292668211", items.get(4).barcode());
+        assertEquals("KPL. TURYSTYCZNY (STOLIK + 4 KRZESŁA) 120 x 60 x 70 CM", items.get(4).name());
+        assertEquals(1, items.get(4).expectedQty());
+        assertEquals("kpl", items.get(4).unit());
+
+        assertEquals("5900779800878", items.get(5).barcode());
+        assertEquals("REGAŁ 5-POZIOMOWY 180 x 90 x 40 CM UDŹWIG PÓŁKI: 175 KG", items.get(5).name());
+        assertEquals(6, items.get(5).expectedQty());
+
+        assertEquals("5901292685065", items.get(6).barcode());
+        assertEquals("ZESTAW DO NAWADNIANIA KROPELKOWEGO Z 15SZT. ZRASZACZAMI", items.get(6).name());
+        assertEquals(5, items.get(6).expectedQty());
+    }
+
+    @Test
+    void shiftsPrefixLinesToNextRowWhenRowStartsMidName() {
+        List<ImportDraftItem> items = pdfImportService.parseLines(SONETA_PREFIX_SHIFT_TEXT);
+
+        assertEquals(3, items.size());
+        assertEquals("9788382829587", items.get(0).barcode());
+        assertEquals("SŁÓJ 2,2 L KWADRATOWY Z ZAPIĘCIEM MECHANICZNYM *8438", items.get(0).name());
+
+        assertEquals("5901292611941", items.get(1).barcode());
+        assertEquals("SŁÓJ 3 L + WIECZKO PL + PRZEPIS/SZCZYPCE ZGRZ=2SZT", items.get(1).name());
+        assertEquals(4, items.get(1).expectedQty());
+
+        assertEquals("5901292629625", items.get(2).barcode());
+        assertEquals("SŁÓJ 4L(4,250) +WIECZKO PLAST+PRZEPIS/SZCZYP CE ZGRZ=2SZT", items.get(2).name());
+        assertEquals(4, items.get(2).expectedQty());
+    }
+
+    @Test
+    void doesNotTreatDimensionsAsQuantityAndUnitInHeuristicParsing() {
+        String text = """
+                Kod Nazwa Ilosc jm.
+                35 9788382829593 MISKA PORCELANOWA 1300ML WZORY*91263 38,00 PLN 6 szt
+                36 5901292668211 KPL. TURYSTYCZNY (STOLIK + 4 KRZESŁA) 120 x 60 x
+                70 CM
+                37 5900779800878 REGAŁ 5-POZIOMOWY 180 x 90 x 40 CM UDŹWIG PÓŁKI: 175 KG 99,00 PLN 6 szt
+                Razem 2
+                """;
+
+        List<ImportDraftItem> items = pdfImportService.parseLines(text);
+
+        assertEquals(2, items.size());
+        assertEquals("9788382829593", items.get(0).barcode());
+        assertEquals(6, items.get(0).expectedQty());
+        assertEquals("5900779800878", items.get(1).barcode());
+        assertEquals(6, items.get(1).expectedQty());
     }
 
     @Test
