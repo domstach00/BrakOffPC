@@ -91,6 +91,7 @@
                                 <div class="row-menu-panel">
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()}}">Zobacz dane</a>
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/report.pdf'}">Pobierz raport</a>
+                                    <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/report.pdf'(includeComments=true)}">Pobierz raport z komentarzami</a>
                                     <a class="row-menu-item" th:href="@{'/deliveries/archive/' + ${delivery.id()} + '/edit'}">Edytuj</a>
                                     <button type="submit"
                                             class="row-menu-item row-menu-button"

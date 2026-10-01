@@ -4,6 +4,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -235,6 +237,11 @@ public class DeliveryRepository {
             return;
         }
         for (String id : new ArrayList<>(ids)) {
+            // Also protects active deliveries if their IDs are passed accidentally.
+            if (findById(id).filter(d -> !DeliveryStatus.ACTIVE.equals(d.status())).isEmpty()) {
+                continue;
+            }
+            jdbcClient.sql("delete from item_comment where delivery_id = ?").param(id).update();
             jdbcClient.sql("delete from device_scan where delivery_id = ?")
                     .param(id)
                     .update();
@@ -245,6 +252,46 @@ public class DeliveryRepository {
                     .params(id, DeliveryStatus.ACTIVE)
                     .update();
         }
+    }
+
+    public List<ItemComment> findComments(String deliveryId) {
+        return jdbcClient.sql("""
+                select * from item_comment where delivery_id = ? order by created_at, comment_id
+                """)
+                .param(deliveryId)
+                .query(this::mapComment)
+                .list();
+    }
+
+    public Optional<ItemComment> findComment(String commentId) {
+        return jdbcClient.sql("select * from item_comment where comment_id = ?")
+                .param(commentId).query(this::mapComment).optional();
+    }
+
+    private ItemComment mapComment(ResultSet rs, int rowNum) throws SQLException {
+        return new ItemComment(
+                rs.getString("comment_id"), rs.getString("delivery_id"), rs.getString("barcode"),
+                rs.getString("original_barcode"), rs.getString("original_name"),
+                rs.getString("device_id"), rs.getString("device_name"), rs.getString("comment_text"),
+                rs.getString("suggested_barcode"), rs.getString("suggested_name"),
+                Instant.parse(rs.getString("created_at")));
+    }
+
+    public void saveComment(ItemComment comment) {
+        jdbcClient.sql("""
+                insert into item_comment (comment_id, delivery_id, barcode, original_barcode, original_name,
+                    device_id, device_name, comment_text, suggested_barcode, suggested_name, created_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)
+                .params(comment.commentId(), comment.deliveryId(), comment.barcode(), comment.originalBarcode(),
+                        comment.originalName(), comment.deviceId(), comment.deviceName(), comment.text(),
+                        comment.suggestedBarcode(), comment.suggestedName(), comment.createdAt().toString())
+                .update();
+    }
+
+    public void moveComment(String commentId, String barcode) {
+        jdbcClient.sql("update item_comment set barcode = ? where comment_id = ?")
+                .params(barcode, commentId).update();
     }
 
     private Optional<DeliveryRecord> findSingleByStatus(String status) {

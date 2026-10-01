@@ -13,6 +13,7 @@
     <meta name="theme-color" content="#ffffff">
     <title>Szczegóły dostawy</title>
     <link rel="stylesheet" th:href="@{/styles.css}">
+    <script th:src="@{/report-download.js}" defer></script>
 </head>
 <body>
 <main class="page">
@@ -49,7 +50,9 @@
                 <h2>Metadane</h2>
                 <div class="actions">
                     <a class="button ghost" th:href="${activeDeliveryDetails ? '/' : '/deliveries/archive'}" th:text="${activeDeliveryDetails ? 'Powrót do dashboardu' : 'Powrót do archiwum'}"></a>
-                    <a class="button ghost" th:href="${activeDeliveryDetails ? '/deliveries/' + delivery.id() + '/report.pdf' : '/deliveries/archive/' + delivery.id() + '/report.pdf'}">Pobierz raport</a>
+                    <div th:with="reportUrl=${activeDeliveryDetails ? '/deliveries/' + delivery.id() + '/report.pdf' : '/deliveries/archive/' + delivery.id() + '/report.pdf'}">
+                        <div th:replace="~{fragments/report-download :: button(reportUrl=${reportUrl})}"></div>
+                    </div>
                     <a class="button ghost" th:href="${activeDeliveryDetails ? '/deliveries/' + delivery.id() + '/edit' : '/deliveries/archive/' + delivery.id() + '/edit'}">Edytuj dane</a>
                     <form method="post"
                           th:if="${!activeDeliveryDetails}"
@@ -114,6 +117,7 @@
                     <th>Zeskanowane</th>
                     <th>Różnica</th>
                     <th>Status</th>
+                    <th>Komentarze</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -124,6 +128,7 @@
                     <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
                     <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
                     <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
+                    <td data-label="Komentarze"><div th:replace="~{fragments/item-comments :: list(${row.comments()}, ${delivery.id()}, ${row.barcode()})}"></div></td>
                 </tr>
                 </tbody>
             </table>
@@ -131,6 +136,14 @@
         <div class="empty-state" th:if="${#lists.isEmpty(dashboardRows)}">
             <strong>Brak danych produktów</strong>
             <p>Ta dostawa nie zawiera zapisanych pozycji do wyświetlenia.</p>
+        </div>
+    </section>
+
+    <section class="panel" th:if="${!#lists.isEmpty(detachedComments)}">
+        <h2>Komentarze do usuniętych pozycji</h2>
+        <div th:each="comment : ${detachedComments}">
+            <strong th:text="${comment.barcode() + ' — ' + comment.originalName()}"></strong>
+            <div th:replace="~{fragments/item-comments :: list(${ {comment} }, ${delivery.id()}, ${comment.barcode()})}"></div>
         </div>
     </section>
 

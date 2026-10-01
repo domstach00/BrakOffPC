@@ -5,11 +5,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import org.wodrol.brakoffpc.delivery.ActiveDeliveryResponse;
 import org.wodrol.brakoffpc.delivery.CurrentDeliveryResponse;
 import org.wodrol.brakoffpc.delivery.DeliveryMonitorResponse;
@@ -17,6 +19,8 @@ import org.wodrol.brakoffpc.delivery.DeliveryService;
 import org.wodrol.brakoffpc.delivery.DeviceStateResponse;
 import org.wodrol.brakoffpc.delivery.ScanUpdateRequest;
 import org.wodrol.brakoffpc.delivery.ScanUpdateResult;
+import org.wodrol.brakoffpc.delivery.ItemComment;
+import org.wodrol.brakoffpc.delivery.ItemCommentRequest;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +35,12 @@ public class ApiController {
 
     public ApiController(DeliveryService deliveryService) {
         this.deliveryService = deliveryService;
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleCommentError(ResponseStatusException exception) {
+        return ResponseEntity.status(exception.getStatusCode())
+                .body(Map.of("reason", exception.getReason() == null ? "REQUEST_REJECTED" : exception.getReason()));
     }
 
     @GetMapping("/health")
@@ -65,6 +75,23 @@ public class ApiController {
     @GetMapping("/active-delivery")
     public ResponseEntity<CurrentDeliveryResponse> getActiveDelivery() {
         return getCurrentDelivery();
+    }
+
+    @GetMapping("/deliveries/{deliveryId}/comments")
+    public List<ItemComment> getComments(@PathVariable String deliveryId) {
+        return deliveryService.getComments(deliveryId);
+    }
+
+    @GetMapping("/deliveries/{deliveryId}/items/{barcode}/comments")
+    public List<ItemComment> getItemComments(@PathVariable String deliveryId, @PathVariable String barcode) {
+        return deliveryService.getComments(deliveryId).stream()
+                .filter(comment -> comment.barcode().equals(barcode)).toList();
+    }
+
+    @PostMapping("/deliveries/{deliveryId}/items/{barcode}/comments")
+    public ItemComment addComment(@PathVariable String deliveryId, @PathVariable String barcode,
+                                  @Valid @RequestBody ItemCommentRequest request) {
+        return deliveryService.addComment(deliveryId, barcode, request);
     }
 
     @GetMapping("/dashboard")

@@ -13,6 +13,7 @@
     <meta name="theme-color" content="#ffffff">
     <title>BrakOff PC</title>
     <link rel="stylesheet" th:href="@{/styles.css}">
+    <script th:src="@{/report-download.js}" defer></script>
 </head>
 <body>
 <main class="page">
@@ -91,7 +92,7 @@
                             <td data-label="Akcja">
                                 <div class="actions">
                                     <a class="button secondary" th:href="@{'/deliveries/' + ${delivery.id()}}">Podgląd</a>
-                                    <a class="button ghost" th:href="@{'/deliveries/' + ${delivery.id()} + '/report.pdf'}">Raport</a>
+                                    <div th:replace="~{fragments/report-download :: button(reportUrl=@{'/deliveries/' + ${delivery.id()} + '/report.pdf'})}"></div>
                                     <a class="button ghost" th:href="@{'/deliveries/' + ${delivery.id()} + '/edit'}">Edytuj</a>
                                     <form method="post" th:action="@{'/deliveries/' + ${delivery.id()} + '/close'}">
                                         <button type="submit" class="danger">Zakończ</button>
@@ -147,7 +148,7 @@
                     <div class="actions delivery-monitor-actions">
                         <a class="button secondary" th:href="@{'/deliveries/' + ${monitor.delivery().id()}}">Podgląd dostawy</a>
                         <a class="button ghost" th:href="@{'/deliveries/' + ${monitor.delivery().id()} + '/edit'}">Edytuj tabelę</a>
-                        <a class="button ghost" th:href="@{'/deliveries/' + ${monitor.delivery().id()} + '/report.pdf'}">Raport</a>
+                        <div th:replace="~{fragments/report-download :: button(reportUrl=@{'/deliveries/' + ${monitor.delivery().id()} + '/report.pdf'})}"></div>
                     </div>
 
                     <div class="table-shell" th:if="${!#lists.isEmpty(monitor.rows())}">
@@ -160,6 +161,7 @@
                                 <th>Zeskanowane</th>
                                 <th>Różnica</th>
                                 <th>Status</th>
+                                <th>Komentarze</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -170,6 +172,7 @@
                                 <td data-label="Zeskanowane" th:text="${row.scannedQty() + ' ' + row.unit()}"></td>
                                 <td data-label="Różnica" th:text="${row.difference() + ' ' + row.unit()}"></td>
                                 <td data-label="Status"><span class="badge" th:text="${row.status()}"></span></td>
+                    <td data-label="Komentarze"><div th:replace="~{fragments/item-comments :: list(${row.comments()}, ${monitor.delivery().id()}, ${row.barcode()})}"></div></td>
                             </tr>
                             </tbody>
                         </table>
@@ -420,6 +423,30 @@
         return element;
     }
 
+    function createReportDownload(reportUrl) {
+        const container = createElement('div', 'report-download');
+        const primary = createAction(reportUrl, 'Pobierz raport');
+        primary.classList.add('report-download-primary');
+
+        const toggle = createElement('button', 'ghost report-download-toggle');
+        toggle.type = 'button';
+        toggle.setAttribute('aria-label', 'Dodatkowe opcje raportu');
+        toggle.setAttribute('aria-expanded', 'false');
+        const arrow = createElement('span', null, '▾');
+        arrow.setAttribute('aria-hidden', 'true');
+        toggle.appendChild(arrow);
+
+        const menu = createElement('div', 'report-download-menu');
+        menu.hidden = true;
+        menu.appendChild(createAction(
+            `${reportUrl}?includeComments=true`,
+            'Pobierz raport z komentarzami',
+            'row-menu-item'
+        ));
+        container.append(primary, toggle, menu);
+        return container;
+    }
+
     function createCell(label, content, mono = false, title = null) {
         const cell = createElement('td');
         cell.dataset.label = label;
@@ -443,6 +470,48 @@
         const cell = createElement('td');
         cell.dataset.label = label;
         cell.appendChild(createElement('span', 'badge', content));
+        return cell;
+    }
+
+    function createCommentsCell(comments, deliveryId, barcode, openCommentKeys) {
+        const cell = createElement('td');
+        cell.dataset.label = 'Komentarze';
+        if (!Array.isArray(comments) || comments.length === 0) {
+            return cell;
+        }
+
+        const disclosure = createElement('details', 'item-comments-disclosure');
+        const commentKey = `${deliveryId}:${barcode}`;
+        disclosure.dataset.commentKey = commentKey;
+        disclosure.open = openCommentKeys.has(commentKey);
+        disclosure.appendChild(createElement('summary', null, `Komentarze (${comments.length})`));
+        const list = createElement('div', 'item-comments');
+        for (const comment of comments) {
+            const item = createElement('article', 'item-comment');
+            const timestamp = new Date(comment.createdAt);
+            const date = Number.isNaN(timestamp.getTime()) ? '' : timestamp.toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            item.appendChild(createElement('small', 'comment-meta', `${comment.deviceName || comment.deviceId} · ${date}`));
+            item.appendChild(createElement('p', 'comment-text', comment.text));
+            if (comment.suggestedBarcode) {
+                item.appendChild(createElement('p', 'comment-suggestion', `Proponowany barcode: ${comment.suggestedBarcode}`));
+            }
+            if (comment.suggestedName) {
+                item.appendChild(createElement('p', 'comment-suggestion', `Proponowana nazwa: ${comment.suggestedName}`));
+            }
+            if (comment.originalBarcode !== comment.barcode) {
+                item.appendChild(createElement('small', 'comment-meta', `Barcode w chwili zgłoszenia: ${comment.originalBarcode}`));
+            }
+            list.appendChild(item);
+        }
+        disclosure.appendChild(list);
+        cell.appendChild(disclosure);
         return cell;
     }
 
@@ -470,7 +539,7 @@
         return link;
     }
 
-    function renderMonitor(monitor, openDeliveryIds) {
+    function renderMonitor(monitor, openDeliveryIds, openCommentKeys) {
         const delivery = monitor.delivery ?? {};
         const rows = Array.isArray(monitor.rows) ? monitor.rows : [];
         const deviceRows = Array.isArray(monitor.deviceRows) ? monitor.deviceRows : [];
@@ -514,13 +583,13 @@
         actions.append(
             createAction(`/deliveries/${deliveryId}`, 'Podgląd dostawy', 'button secondary'),
             createAction(`/deliveries/${deliveryId}/edit`, 'Edytuj tabelę'),
-            createAction(`/deliveries/${deliveryId}/report.pdf`, 'Raport')
+            createReportDownload(`/deliveries/${deliveryId}/report.pdf`)
         );
         body.appendChild(actions);
 
         if (rows.length > 0) {
             body.appendChild(createTable(
-                ['Barcode', 'Nazwa', 'Oczekiwane', 'Zeskanowane', 'Różnica', 'Status'],
+                ['Barcode', 'Nazwa', 'Oczekiwane', 'Zeskanowane', 'Różnica', 'Status', 'Komentarze'],
                 rows,
                 row => {
                     const tr = createElement('tr');
@@ -530,7 +599,8 @@
                         createCell('Oczekiwane', formatQuantity(row.expectedQty ?? 0, row.unit)),
                         createCell('Zeskanowane', formatQuantity(row.scannedQty ?? 0, row.unit)),
                         createCell('Różnica', formatQuantity(row.difference ?? 0, row.unit)),
-                        createBadgeCell('Status', rowStatus(row))
+                        createBadgeCell('Status', rowStatus(row)),
+                        createCommentsCell(row.comments, deliveryId, row.barcode ?? '', openCommentKeys)
                     );
                     return tr;
                 }
@@ -582,10 +652,13 @@
         const openDeliveryIds = new Set(Array.from(deliveryMonitorList.querySelectorAll('.delivery-monitor[open]'))
             .map(element => element.dataset.deliveryId)
             .filter(Boolean));
+        const openCommentKeys = new Set(Array.from(deliveryMonitorList.querySelectorAll('.item-comments-disclosure[open]'))
+            .map(element => element.dataset.commentKey)
+            .filter(Boolean));
 
         deliveryMonitorList.replaceChildren();
         for (const monitor of monitors) {
-            deliveryMonitorList.appendChild(renderMonitor(monitor, openDeliveryIds));
+            deliveryMonitorList.appendChild(renderMonitor(monitor, openDeliveryIds, openCommentKeys));
         }
 
         setVisible(deliveryMonitorList, monitors.length > 0);

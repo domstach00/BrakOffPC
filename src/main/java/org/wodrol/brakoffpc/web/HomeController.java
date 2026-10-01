@@ -198,6 +198,7 @@ public class HomeController {
         model.addAttribute("deliveryStatusDescription", DeliveryStatus.description(delivery.get().status()));
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRowsForDelivery(id));
+        model.addAttribute("detachedComments", deliveryService.getDetachedComments(id));
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateDashboardSummary(model, dashboardRows);
@@ -227,6 +228,7 @@ public class HomeController {
         model.addAttribute("deliveryStatusDescription", DeliveryStatus.description(delivery.get().status()));
         model.addAttribute("dashboardRows", dashboardRows);
         model.addAttribute("deviceRows", deliveryService.getDeviceRowsForDelivery(id));
+        model.addAttribute("detachedComments", deliveryService.getDetachedComments(id));
         model.addAttribute("message", message);
         model.addAttribute("error", error);
         populateDashboardSummary(model, dashboardRows);
@@ -564,11 +566,11 @@ public class HomeController {
     }
 
     @GetMapping("/deliveries/report.pdf")
-    public ResponseEntity<byte[]> downloadReport() {
+    public ResponseEntity<byte[]> downloadReport(@RequestParam(defaultValue = "false") boolean includeComments) {
         String reportFileName = deliveryService.getActiveDelivery()
-                .map(activeDelivery -> "raport-dostawy-" + sanitizeReportFileName(activeDelivery.sourceFileName()) + ".pdf")
-                .orElse("raport-dostawy.pdf");
-        byte[] content = deliveryService.generateReportPdf();
+                .map(activeDelivery -> "raport-dostawy-" + sanitizeReportFileName(activeDelivery.sourceFileName()))
+                .orElse("raport-dostawy") + (includeComments ? "-z-komentarzami.pdf" : ".pdf");
+        byte[] content = deliveryService.generateReportPdf(includeComments);
         log.info("Wygenerowano raport PDF plik={} rozmiarBajtow={}", reportFileName, content.length);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(reportFileName).build().toString())
@@ -577,11 +579,13 @@ public class HomeController {
     }
 
     @GetMapping("/deliveries/{id}/report.pdf")
-    public ResponseEntity<byte[]> downloadReport(@PathVariable String id) {
+    public ResponseEntity<byte[]> downloadReport(@PathVariable String id,
+                                                @RequestParam(defaultValue = "false") boolean includeComments) {
         var delivery = deliveryService.getDelivery(id)
                 .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do raportu."));
-        String reportFileName = "raport-dostawy-" + sanitizeReportFileName(delivery.sourceFileName()) + ".pdf";
-        byte[] content = deliveryService.generateReportPdf(id);
+        String reportFileName = "raport-dostawy-" + sanitizeReportFileName(delivery.sourceFileName())
+                + (includeComments ? "-z-komentarzami.pdf" : ".pdf");
+        byte[] content = deliveryService.generateReportPdf(id, includeComments);
         log.info("Wygenerowano raport PDF dla dostawy id={} plik={} rozmiarBajtow={}",
                 id, reportFileName, content.length);
         return ResponseEntity.ok()
@@ -591,11 +595,13 @@ public class HomeController {
     }
 
     @GetMapping("/deliveries/archive/{id}/report.pdf")
-    public ResponseEntity<byte[]> downloadArchivedReport(@PathVariable String id) {
+    public ResponseEntity<byte[]> downloadArchivedReport(@PathVariable String id,
+                                                        @RequestParam(defaultValue = "false") boolean includeComments) {
         var delivery = deliveryService.getDelivery(id)
                 .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do raportu."));
-        String reportFileName = "raport-dostawy-" + sanitizeReportFileName(delivery.sourceFileName()) + ".pdf";
-        byte[] content = deliveryService.generateReportPdf(id);
+        String reportFileName = "raport-dostawy-" + sanitizeReportFileName(delivery.sourceFileName())
+                + (includeComments ? "-z-komentarzami.pdf" : ".pdf");
+        byte[] content = deliveryService.generateReportPdf(id, includeComments);
         log.info("Wygenerowano raport PDF dla archiwalnej dostawy id={} plik={} rozmiarBajtow={}",
                 id, reportFileName, content.length);
         return ResponseEntity.ok()

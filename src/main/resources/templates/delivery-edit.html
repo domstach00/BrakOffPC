@@ -104,6 +104,7 @@
                         </td>
                         <td data-label="Nazwa">
                             <input th:field="*{rows[__${stat.index}__].name}" required>
+                            <div th:replace="~{fragments/item-comments :: list(${row.comments()}, ${delivery.id()}, ${row.barcode()})}"></div>
                         </td>
                         <td data-label="Oczekiwane">
                             <input th:field="*{rows[__${stat.index}__].expectedQty}" type="number" min="0" required>

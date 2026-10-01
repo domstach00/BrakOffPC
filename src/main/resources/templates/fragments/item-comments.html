@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pl" xmlns:th="http://www.thymeleaf.org">
+<body>
+<details th:fragment="list(comments, deliveryId, barcode)"
+         th:if="${!#lists.isEmpty(comments)}"
+         th:attr="data-comment-key=${deliveryId + ':' + barcode}"
+         class="item-comments-disclosure">
+    <summary th:text="${'Komentarze (' + #lists.size(comments) + ')'}"></summary>
+    <div class="item-comments">
+        <article class="item-comment" th:each="comment : ${comments}">
+            <small class="comment-meta" th:text="${comment.authorLabel() + ' · ' + T(org.wodrol.brakoffpc.web.PolishDateTimeFormatter).formatWithoutSeconds(comment.createdAt())}"></small>
+            <p class="comment-text" th:text="${comment.text()}"></p>
+            <p class="comment-suggestion" th:if="${comment.suggestedBarcode() != null}">
+                Proponowany barcode: <strong class="mono" th:text="${comment.suggestedBarcode()}"></strong>
+            </p>
+            <p class="comment-suggestion" th:if="${comment.suggestedName() != null}">
+                Proponowana nazwa: <strong th:text="${comment.suggestedName()}"></strong>
+            </p>
+            <small class="comment-meta" th:if="${comment.originalBarcode() != comment.barcode()}"
+                   th:text="${'Barcode w chwili zgłoszenia: ' + comment.originalBarcode()}"></small>
+        </article>
+    </div>
+</details>
+</body>
+</html>

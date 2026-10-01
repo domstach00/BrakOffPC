@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="pl" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="button(reportUrl)" class="report-download">
+    <a class="button ghost report-download-primary" th:href="${reportUrl}">Pobierz raport</a>
+    <button type="button" class="ghost report-download-toggle" aria-label="Dodatkowe opcje raportu" aria-expanded="false">
+        <span aria-hidden="true">▾</span>
+    </button>
+    <div class="report-download-menu" hidden>
+        <a class="row-menu-item" th:href="${reportUrl + '?includeComments=true'}">Pobierz raport z komentarzami</a>
+    </div>
+</div>
+</body>
+</html>

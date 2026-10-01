@@ -2,7 +2,7 @@ package org.wodrol.brakoffpc.delivery;
 
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
-import com.lowagie.text.FontFactory;
+import com.lowagie.text.Font;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.pdf.PdfPCell;
@@ -12,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.wodrol.brakoffpc.common.MeasurementUnit;
 import org.wodrol.brakoffpc.imports.ImportDraft;
 import org.wodrol.brakoffpc.imports.ImportDraftItem;
@@ -118,6 +120,7 @@ public class DeliveryService {
     }
 
     private CurrentDeliveryResponse buildCurrentDeliveryResponse(DeliveryRecord delivery) {
+        Map<String, List<ItemComment>> comments = commentsByBarcode(delivery.id());
         Map<String, Integer> scannedQtyByBarcode = new LinkedHashMap<>();
         for (DeviceScanState scan : deliveryRepository.findScans(delivery.id())) {
             scannedQtyByBarcode.merge(scan.barcode(), scan.quantity(), Integer::sum);
@@ -135,7 +138,8 @@ public class DeliveryService {
                                 item.name(),
                                 item.expectedQty(),
                                 item.unit(),
-                                scannedQtyByBarcode.getOrDefault(item.barcode(), 0)))
+                                scannedQtyByBarcode.getOrDefault(item.barcode(), 0),
+                                comments.getOrDefault(item.barcode(), List.of())))
                         .toList()
         );
     }
@@ -250,7 +254,10 @@ public class DeliveryService {
             }
         }
 
+        Map<String, List<ItemComment>> comments = commentsByBarcode(delivery.id());
         return rows.values().stream()
+                .map(row -> new DashboardRow(row.barcode(), row.name(), row.expectedQty(), row.scannedQty(),
+                        row.difference(), row.unit(), row.unordered(), comments.getOrDefault(row.barcode(), List.of())))
                 .sorted(Comparator.comparing(DashboardRow::barcode))
                 .toList();
     }
@@ -362,6 +369,20 @@ public class DeliveryService {
                 .toList();
         List<DeviceScanState> migratedScans = rebuildScans(finalRows, scansByBarcode);
 
+        // Read the old associations first, so swapping two barcodes cannot mix comments.
+        Map<String, String> correctedBarcodes = new LinkedHashMap<>();
+        for (DeliveryAdjustmentRow row : finalRows) {
+            if (row.originalBarcode() != null) {
+                correctedBarcodes.put(row.originalBarcode(), row.barcode());
+            }
+        }
+        for (ItemComment comment : deliveryRepository.findComments(deliveryId)) {
+            String corrected = correctedBarcodes.get(comment.barcode());
+            if (corrected != null && !corrected.equals(comment.barcode())) {
+                deliveryRepository.moveComment(comment.commentId(), corrected);
+            }
+        }
+
         deliveryRepository.replaceItems(deliveryId, items);
         deliveryRepository.replaceScans(deliveryId, migratedScans);
         deliveryRepository.updateMetadata(
@@ -394,6 +415,59 @@ public class DeliveryService {
         log.info("Przywrócono archiwalną dostawę do pracy id={} plik={} liczbaPozycji={}",
                 activated.id(), activated.sourceFileName(), activated.items().size());
         return activated;
+    }
+
+    public List<ItemComment> getComments(String deliveryId) {
+        if (getActiveDelivery(deliveryId).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "DELIVERY_NOT_ACTIVE");
+        }
+        return deliveryRepository.findComments(deliveryId);
+    }
+
+    public List<ItemComment> getDetachedComments(String deliveryId) {
+        var barcodes = getDashboardRows(deliveryId).stream().map(DashboardRow::barcode)
+                .collect(java.util.stream.Collectors.toSet());
+        return deliveryRepository.findComments(deliveryId).stream()
+                .filter(comment -> !barcodes.contains(comment.barcode())).toList();
+    }
+
+    private Map<String, List<ItemComment>> commentsByBarcode(String deliveryId) {
+        return deliveryRepository.findComments(deliveryId).stream()
+                .collect(java.util.stream.Collectors.groupingBy(ItemComment::barcode, LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+    }
+
+    @Transactional
+    public ItemComment addComment(String deliveryId, String barcode, ItemCommentRequest request) {
+        String targetBarcode = barcode.trim();
+        String commentId = request.commentId().toLowerCase(java.util.Locale.ROOT);
+        String deviceId = request.deviceId().trim();
+        String deviceName = normalizeText(request.deviceName());
+        String text = request.text().strip();
+        String suggestedName = normalizeText(request.suggestedName());
+        Optional<ItemComment> existing = deliveryRepository.findComment(commentId);
+        if (existing.isPresent()) {
+            ItemComment comment = existing.get();
+            if (!comment.deliveryId().equals(deliveryId) || !comment.originalBarcode().equals(targetBarcode)
+                    || !comment.deviceId().equals(deviceId) || !Objects.equals(comment.deviceName(), deviceName)
+                    || !comment.text().equals(text) || !Objects.equals(comment.suggestedBarcode(), request.suggestedBarcode())
+                    || !Objects.equals(comment.suggestedName(), suggestedName)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "COMMENT_ID_CONFLICT");
+            }
+            // Retry remains safe even if the product was corrected or the delivery closed.
+            return comment;
+        }
+        DeliveryRecord delivery = getActiveDelivery(deliveryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DELIVERY_NOT_ACTIVE"));
+        String itemName = delivery.items().stream().filter(item -> item.barcode().equals(targetBarcode))
+                .map(DeliveryItem::name).findFirst()
+                .orElseGet(() -> deliveryRepository.findScans(deliveryId).stream()
+                        .filter(scan -> scan.barcode().equals(targetBarcode)).map(this::fallbackItemName)
+                        .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "ITEM_NOT_FOUND")));
+        ItemComment comment = new ItemComment(commentId, deliveryId, targetBarcode, targetBarcode, itemName,
+                deviceId, deviceName, text, request.suggestedBarcode(), suggestedName, Instant.now());
+        deliveryRepository.saveComment(comment);
+        return comment;
     }
 
     public List<DeviceStateResponse> getDeviceState(String deviceId) {
@@ -518,12 +592,20 @@ public class DeliveryService {
     }
 
     public byte[] generateReportPdf() {
+        return generateReportPdf(false);
+    }
+
+    public byte[] generateReportPdf(boolean includeComments) {
         DeliveryRecord active = deliveryRepository.findActive()
                 .orElseThrow(() -> new IllegalStateException("Brak aktywnej dostawy."));
-        return generateReportPdf(active.id());
+        return generateReportPdf(active.id(), includeComments);
     }
 
     public byte[] generateReportPdf(String deliveryId) {
+        return generateReportPdf(deliveryId, false);
+    }
+
+    public byte[] generateReportPdf(String deliveryId, boolean includeComments) {
         DeliveryRecord delivery = deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new IllegalStateException("Nie znaleziono dostawy do raportu."));
         List<DashboardRow> dashboardRows = getDashboardRows(deliveryId);
@@ -534,14 +616,14 @@ public class DeliveryService {
         try {
             PdfWriter.getInstance(document, outputStream);
             document.open();
-            document.add(new Paragraph("Raport dostawy", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16)));
-            document.add(new Paragraph("ID wczytanej dostawy: " + delivery.id()));
-            document.add(new Paragraph("Plik źródłowy: " + delivery.sourceFileName()));
-            document.add(new Paragraph("Dostawca: " + reportValue(delivery.supplierName())));
-            document.add(new Paragraph("Dokument handlowy: " + reportValue(delivery.commercialDocumentNumber())));
-            document.add(new Paragraph("Przyjęcie magazynowe: " + reportValue(delivery.warehouseDocumentNumber())));
-            document.add(new Paragraph("Wygenerowano: " + PolishDateTimeFormatter.timeNow()));
-            document.add(new Paragraph(" "));
+            document.add(new Paragraph("Raport dostawy", ReportFonts.font(16, Font.BOLD)));
+            document.add(new Paragraph("ID wczytanej dostawy: " + delivery.id(), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph("Plik źródłowy: " + delivery.sourceFileName(), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph("Dostawca: " + reportValue(delivery.supplierName()), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph("Dokument handlowy: " + reportValue(delivery.commercialDocumentNumber()), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph("Przyjęcie magazynowe: " + reportValue(delivery.warehouseDocumentNumber()), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph("Wygenerowano: " + PolishDateTimeFormatter.timeNow(), ReportFonts.font(10, Font.NORMAL)));
+            document.add(new Paragraph(" ", ReportFonts.font(10, Font.NORMAL)));
 
             addSection(document, "Brakujące produkty",
                     dashboardRows.stream().filter(row -> !row.unordered() && row.difference() > 0).toList());
@@ -549,6 +631,9 @@ public class DeliveryService {
                     dashboardRows.stream().filter(row -> !row.unordered() && row.difference() < 0).toList());
             addSection(document, "Produkty niezamówione",
                     dashboardRows.stream().filter(DashboardRow::unordered).toList());
+            if (includeComments) {
+                addCommentsSection(document, deliveryRepository.findComments(deliveryId), dashboardRows);
+            }
         } catch (DocumentException exception) {
             throw new IllegalStateException("Nie udało sie wygenerować raportu PDF.", exception);
         } finally {
@@ -558,12 +643,12 @@ public class DeliveryService {
     }
 
     private void addSection(Document document, String title, List<DashboardRow> rows) throws DocumentException {
-        Paragraph heading = new Paragraph(title, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13));
+        Paragraph heading = new Paragraph(title, ReportFonts.font(13, Font.BOLD));
         heading.setSpacingBefore(10f);
         heading.setSpacingAfter(8f);
         document.add(heading);
         if (rows.isEmpty()) {
-            Paragraph emptyState = new Paragraph("Brak pozycji.");
+            Paragraph emptyState = new Paragraph("Brak pozycji.", ReportFonts.font(10, Font.NORMAL));
             emptyState.setSpacingAfter(10f);
             document.add(emptyState);
             return;
@@ -572,6 +657,8 @@ public class DeliveryService {
         PdfPTable table = new PdfPTable(new float[]{3, 5, 2.4f, 2.8f, 2.2f});
         table.setWidthPercentage(100);
         table.setSpacingAfter(10f);
+        table.setHeaderRows(1);
+        table.setSplitLate(false);
         addCell(table, "Barcode");
         addCell(table, "Nazwa");
         addCell(table, "Oczekiwane");
@@ -579,19 +666,58 @@ public class DeliveryService {
         addCell(table, "Różnica");
 
         for (DashboardRow row : rows) {
-            table.addCell(new Phrase(row.barcode()));
-            table.addCell(new Phrase(row.name()));
-            table.addCell(new Phrase(MeasurementUnit.format(row.expectedQty(), row.unit())));
-            table.addCell(new Phrase(MeasurementUnit.format(row.scannedQty(), row.unit())));
-            table.addCell(new Phrase(MeasurementUnit.format(row.difference(), row.unit())));
+            table.addCell(new Phrase(row.barcode(), ReportFonts.font(10, Font.NORMAL)));
+            table.addCell(new Phrase(row.name(), ReportFonts.font(10, Font.NORMAL)));
+            table.addCell(new Phrase(MeasurementUnit.format(row.expectedQty(), row.unit()), ReportFonts.font(10, Font.NORMAL)));
+            table.addCell(new Phrase(MeasurementUnit.format(row.scannedQty(), row.unit()), ReportFonts.font(10, Font.NORMAL)));
+            table.addCell(new Phrase(MeasurementUnit.format(row.difference(), row.unit()), ReportFonts.font(10, Font.NORMAL)));
         }
         document.add(table);
     }
 
     private void addCell(PdfPTable table, String value) {
-        PdfPCell cell = new PdfPCell(new Phrase(value));
+        PdfPCell cell = new PdfPCell(new Phrase(value, ReportFonts.font(10, Font.NORMAL)));
         cell.setNoWrap(true);
         table.addCell(cell);
+    }
+
+    private void addCommentsSection(Document document, List<ItemComment> comments, List<DashboardRow> rows)
+            throws DocumentException {
+        Paragraph heading = new Paragraph("Komentarze do produktów", ReportFonts.font(13, Font.BOLD));
+        heading.setSpacingBefore(12);
+        heading.setSpacingAfter(8);
+        document.add(heading);
+        if (comments.isEmpty()) {
+            document.add(new Paragraph("Brak komentarzy.", ReportFonts.font(10, Font.NORMAL)));
+            return;
+        }
+        Map<String, DashboardRow> products = rows.stream().collect(java.util.stream.Collectors.toMap(DashboardRow::barcode, row -> row));
+        Map<String, List<ItemComment>> grouped = comments.stream().collect(java.util.stream.Collectors.groupingBy(
+                ItemComment::barcode, LinkedHashMap::new, java.util.stream.Collectors.toList()));
+        for (var entry : grouped.entrySet()) {
+            DashboardRow row = products.get(entry.getKey());
+            String name = row != null ? row.name() : entry.getValue().getFirst().originalName() + " (pozycja usunięta)";
+            Paragraph product = new Paragraph(entry.getKey() + " — " + name, ReportFonts.font(11, Font.BOLD));
+            product.setSpacingBefore(10);
+            document.add(product);
+            for (ItemComment comment : entry.getValue()) {
+                StringBuilder content = new StringBuilder(comment.authorLabel()).append(" · ")
+                        .append(PolishDateTimeFormatter.format(comment.createdAt())).append("\n")
+                        .append(comment.text());
+                if (comment.suggestedBarcode() != null) {
+                    content.append("\nProponowany barcode: ").append(comment.suggestedBarcode());
+                }
+                if (comment.suggestedName() != null) {
+                    content.append("\nProponowana nazwa: ").append(comment.suggestedName());
+                }
+                content.append("\nDane w chwili zgłoszenia: ").append(comment.originalBarcode())
+                        .append(" — ").append(comment.originalName());
+                Paragraph text = new Paragraph(content.toString(), ReportFonts.font(10, Font.NORMAL));
+                text.setSpacingBefore(4);
+                text.setSpacingAfter(8);
+                document.add(text);
+            }
+        }
     }
 
     private boolean isNewer(DeviceScanState incoming, DeviceScanState existing) {

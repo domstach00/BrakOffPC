@@ -54,3 +54,21 @@ CREATE TABLE IF NOT EXISTS device_scan (
     UNIQUE(delivery_id, device_id, barcode),
     FOREIGN KEY (delivery_id) REFERENCES delivery (id) ON DELETE CASCADE
 );
+
+-- Separate from device_scan: posting a comment never changes counted quantities.
+-- schema.sql runs on every startup, including installations with an existing DB.
+CREATE TABLE IF NOT EXISTS item_comment (
+    comment_id TEXT PRIMARY KEY,
+    delivery_id TEXT NOT NULL,
+    barcode TEXT NOT NULL,
+    original_barcode TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    device_name TEXT,
+    comment_text TEXT NOT NULL,
+    suggested_barcode TEXT,
+    suggested_name TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (delivery_id) REFERENCES delivery (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_item_comment_product ON item_comment(delivery_id, barcode, created_at);
